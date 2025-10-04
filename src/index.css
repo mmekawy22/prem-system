@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* === Body & Fonts === */
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* خلفية متدرجة أنيقة */
+  background: linear-gradient(to right, #f9fafb, #f1f5f9); /* من slate-50 إلى slate-100 */
+  min-height: 100vh;
+}
+
+/* للغة العربية */
+html[dir="rtl"] {
+  direction: rtl;
+  font-family: 'Cairo', sans-serif;
+}
+
+/* === Custom Scrollbar === */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 8px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* slate-300 */
+  border-radius: 10px;
+}
+
+.custom-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8; /* slate-400 */
+}
+
+/* For firefox */
+.custom-scrollbar {
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}
+
+/* === Print Styles === */
+@media print {
+  /* إخفاء كل حاجة افتراضياً */
+  body * {
+    visibility: hidden;
+  }
+
+  /* إظهار منطقة الطباعة فقط */
+  .printable-area, .printable-area * {
+    visibility: visible;
+  }
+
+  .printable-area {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+    border: none;
+    box-shadow: none;
+    background: white !important;
+  }
+  
+  .no-print {
+    display: none !important;
+  }
+
+  .print-only {
+    display: block !important;
+  }
+
+  .print-only-item {
+    display: flex !important; /* أو block حسب الحاجة */
+  }
+}
+
+/* إخفاء العناصر الخاصة بالطباعة فقط عن الشاشة */
+.print-only,
+.print-only-item {
+  display: none;
+}

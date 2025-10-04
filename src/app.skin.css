@@ -1,0 +1,141 @@
+/* src/app.skin.css */
+
+/* Basic variables */
+:root{
+  --sidebar-bg: #0f1724; /* dark blue/black */
+  --sidebar-text: #e6eef6;
+  --primary: #2563eb; /* blue */
+  --muted: #64748b;
+  --surface: #f8fafc;
+  --header-bg: #ffffff;
+}
+
+/* App wrapper */
+.pos-app {
+  display: flex;
+  height: 100vh;
+  font-family: Inter, "Segoe UI", Roboto, "Noto Sans", system-ui, -apple-system, sans-serif;
+  background: linear-gradient(90deg, var(--surface), #f1f5f9);
+}
+
+/* Sidebar */
+.pos-sidebar {
+  width: 260px;
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+  display: flex;
+  flex-direction: column;
+  border-right: 1px solid rgba(255,255,255,0.04);
+  overflow: hidden;
+}
+
+.sidebar-collapsed .pos-sidebar { width: 80px; }
+
+.pos-logo {
+  padding: 18px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-bottom: 1px solid rgba(255,255,255,0.03);
+}
+
+.store-logo {
+  max-width: 100%;
+  height: auto;
+  display:block;
+  border-radius: 4px;
+}
+
+.store-placeholder {
+  font-weight: 700;
+  font-size: 20px;
+  color: var(--sidebar-text);
+}
+
+/* nav */
+.pos-nav-wrap {
+  padding: 12px;
+  overflow-y: auto;
+  flex: 1;
+}
+.pos-nav {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pos-nav-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--sidebar-text);
+  padding: 10px 12px;
+  text-decoration: none;
+  border-radius: 6px;
+  margin-bottom: 6px;
+  transition: background .15s, color .15s;
+}
+.pos-nav-item:hover { background: rgba(255,255,255,0.04); color: #fff; }
+.pos-nav-item .pos-icon { font-size: 18px; width: 20px; display:flex; align-items:center; justify-content:center; }
+.pos-nav-item .pos-text { font-size: 15px; line-height:1; }
+.pos-nav-item.active { background: var(--primary); color: white; box-shadow: 0 2px 6px rgba(0,0,0,0.2); }
+
+/* sections */
+.pos-section {
+  color: #9aa6b2;
+  font-size: 11px;
+  margin: 12px 8px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+/* main area */
+.pos-main {
+  flex: 1;
+  display:flex;
+  flex-direction:column;
+  min-width: 0;
+}
+
+/* header */
+.pos-header {
+  height: 64px;
+  display:flex;
+  align-items:center;
+  justify-content:space-between;
+  padding: 8px 16px;
+  background: var(--header-bg);
+  border-bottom: 1px solid #e6e9ef;
+}
+.left-controls { display:flex; align-items:center; gap:12px; }
+.collapse-btn { background:transparent; border:none; cursor:pointer; font-size:18px; padding:6px; }
+.app-title { font-weight:700; font-size:16px; color:#0f1724; }
+
+.right-controls { display:flex; gap:10px; align-items:center; }
+
+/* buttons */
+.icon-btn { background:transparent; border:1px solid #e6e9ef; padding:6px 8px; border-radius:6px; cursor:pointer; }
+.logout-btn { display:flex; gap:8px; align-items:center; padding:6px 10px; background:#ef4444; color:white; border-radius:6px; border:none; cursor:pointer; }
+.logout-text { font-weight:600; }
+
+/* content area */
+.pos-content {
+  padding: 24px;
+  overflow:auto;
+  min-height: calc(100vh - 64px);
+}
+
+/* small screens */
+@media (max-width: 900px) {
+  .pos-sidebar { display:none; }
+  .pos-app.sidebar-collapsed .pos-sidebar { display:none; }
+  .pos-header { padding: 8px 12px; }
+}
+
+/* dark theme override (optional) */
+.theme-dark {
+  --sidebar-bg: #081124;
+  --sidebar-text: #dbeafe;
+  --primary: #2563eb;
+  --surface: #071124;
+  --header-bg: #071124;
+}
