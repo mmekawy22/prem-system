@@ -181,26 +181,27 @@ app.get('/api/reports/summary', async (req, res) => {
         const params = [startTimestamp, endTimestamp];
         const summaryQuery = `
             SELECT COUNT(id) as transaction_count, SUM(final_total) as total_revenue,
-            (SELECT SUM(ti.quantity) FROM transaction_items ti JOIN transactions t ON ti.transaction_id = t.id WHERE t.timestamp BETWEEN ? AND ? AND t.type = 'sale') as total_items_sold,
+            (SELECT SUM(ti.quantity) FROM transaction_items tiJOIN transactions t ON ti.transaction_id = t.id WHERE t.timestamp BETWEEN ? AND ? AND t.type = 'sale' AND t.status = 'closed') as total_items_sold,
             (SELECT SUM(ti.quantity * p.cost) FROM transaction_items ti JOIN products p ON ti.product_id = p.id JOIN transactions t ON ti.transaction_id = t.id WHERE t.timestamp BETWEEN ? AND ?) as total_cogs
-            FROM transactions WHERE timestamp BETWEEN ? AND ? AND type = 'sale';`;
+            WHERE timestamp BETWEEN ? AND ? AND type = 'sale' AND status = 'closed';
+`;
         const [summaryRows] = await connection.execute(summaryQuery, [...params, ...params, ...params]);
         const summary = summaryRows[0];
         summary.gross_profit = (summary.total_revenue || 0) - (summary.total_cogs || 0);
-        const salesOverTimeQuery = `SELECT DATE(FROM_UNIXTIME(timestamp / 1000)) as date, SUM(final_total) as daily_revenue FROM transactions WHERE timestamp BETWEEN ? AND ? AND type = 'sale' GROUP BY date ORDER BY date ASC;`;
+        const salesOverTimeQuery = `SELECT DATE(FROM_UNIXTIME(timestamp / 1000)) as date, SUM(final_total) as daily_revenue FROM transactions WHERE timestamp BETWEEN ? AND ? AND type = 'sale' AND t.status = 'closed' GROUP BY date ORDER BY date ASC;`;
         const [salesOverTime] = await connection.execute(salesOverTimeQuery, params);
-        const topProductsQuery = `SELECT p.name, SUM(ti.quantity) as total_quantity FROM transaction_items ti JOIN products p ON ti.product_id = p.id JOIN transactions t ON ti.transaction_id = t.id WHERE t.timestamp BETWEEN ? AND ? AND t.type = 'sale' GROUP BY p.name ORDER BY total_quantity DESC LIMIT 5;`;
+        const topProductsQuery = `SELECT p.name, SUM(ti.quantity) as total_quantity FROM transaction_items ti JOIN products p ON ti.product_id = p.id JOIN transactions t ON ti.transaction_id = t.id WHERE t.timestamp BETWEEN ? AND ? AND t.type = 'sale' AND t.status = 'closed' GROUP BY p.name ORDER BY total_quantity DESC LIMIT 5;`;
         const [topProducts] = await connection.execute(topProductsQuery, params);
         const worstProductsQuery = `
             SELECT p.name, COALESCE(SUM(ti.quantity), 0) as total_quantity FROM products p
             LEFT JOIN (
-                SELECT ti_inner.product_id, ti_inner.quantity FROM transaction_items ti_inner JOIN transactions t_inner ON ti_inner.transaction_id = t_inner.id WHERE t_inner.timestamp BETWEEN ? AND ? AND t_inner.type = 'sale'
+                SELECT ti_inner.product_id, ti_inner.quantity FROM transaction_items ti_inner JOIN transactions t_inner ON ti_inner.transaction_id = t_inner.id WHERE t_inner.timestamp BETWEEN ? AND ? AND t_inner.type = 'sale' AND t.status = 'closed'
             ) AS ti ON p.id = ti.product_id
             GROUP BY p.name ORDER BY total_quantity ASC, p.name ASC LIMIT 5;`;
         const [worstProducts] = await connection.execute(worstProductsQuery, params);
         const salesByCategoryQuery = `
             SELECT p.category, SUM(ti.price * ti.quantity) as total_revenue FROM transaction_items ti JOIN products p ON ti.product_id = p.id JOIN transactions t ON ti.transaction_id = t.id
-            WHERE t.timestamp BETWEEN ? AND ? AND t.type = 'sale' AND p.category IS NOT NULL AND p.category != '' GROUP BY p.category ORDER BY total_revenue DESC;`;
+            WHERE t.timestamp BETWEEN ? AND ? AND t.type = 'sale' AND t.status = 'closed' AND p.category IS NOT NULL AND p.category != '' GROUP BY p.category ORDER BY total_revenue DESC;`;
         const [salesByCategory] = await connection.execute(salesByCategoryQuery, params);
         res.json({ summary, salesOverTime, topProducts, worstProducts, salesByCategory });
     } catch (error) {
@@ -485,8 +486,7 @@ const endTs = end ? Number(new Date(end).setHours(23,59,59,999)) : Date.now();
       SELECT ti.product_id, SUM(ti.quantity) AS sold_qty, SUM(ti.quantity * ti.price) AS revenue
       FROM transaction_items ti
       JOIN transactions t ON ti.transaction_id = t.id
-      WHERE t.type = 'sale' AND t.timestamp BETWEEN ? AND ?
-      GROUP BY ti.product_id
+WHERE t.type = 'sale' AND t.status = 'closed' AND t.timestamp BETWEEN ? AND ?      GROUP BY ti.product_id
     `;
 
     // تجميع المرتجعات خلال الفترة
@@ -657,7 +657,7 @@ app.get('/api/products/:id/history', async (req, res) => {
     const { id } = req.params;
     try {
         const query = `
-            SELECT 'Sale' as type, t.id as related_id, t.timestamp, ti.quantity * -1 as quantity_change, CONCAT('Sale to customer #', t.customer_id) as notes FROM transactions t JOIN transaction_items ti ON t.id = ti.transaction_id WHERE ti.product_id = ? AND t.type = 'sale'
+            SELECT 'Sale' as type, t.id as related_id, t.timestamp, ti.quantity * -1 as quantity_change, CONCAT('Sale to customer #', t.customer_id) as notes FROM transactions t JOIN transaction_items ti ON t.id = ti.transaction_id WHERE ti.product_id = ? AND t.type = 'sale' AND t.status = 'closed'
             UNION ALL
             SELECT 'Purchase' as type, p.id as related_id, UNIX_TIMESTAMP(p.created_at) * 1000 as timestamp, pi.quantity as quantity_change, CONCAT('Purchase from supplier #', p.supplier_id) as notes FROM purchases p JOIN purchase_items pi ON p.id = pi.purchase_id WHERE pi.product_id = ?
             UNION ALL
@@ -724,7 +724,52 @@ app.delete('/api/expenses/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to delete expense.' });
     }
 });
+// فواتير البيع المعلقة: GET /api/pending-sales
+app.get('/api/pending-sales', async (req, res) => {
+    try {
+        const [rows] = await pool.execute(
+            `SELECT t.id, u.username AS seller, c.name AS customer, t.final_total, DATE(FROM_UNIXTIME(t.timestamp / 1000)) AS date
+             FROM transactions t
+             LEFT JOIN users u ON t.user_id = u.id
+             LEFT JOIN customers c ON t.customer_id = c.id
+             WHERE t.type = 'sale' AND t.status = 'pending'
+             ORDER BY t.timestamp DESC`
+        );
+        res.json(rows);
+    } catch (error) {
+        console.error("Fetch pending sales error:", error);
+        res.status(500).json({ error: 'تعذر جلب الفواتير المعلقة.' });
+    }
+});
 
+// تقفيل الفواتير المحددة: POST /api/close-sales
+app.post('/api/close-sales', async (req, res) => {
+    const { ids } = req.body;
+    if (!Array.isArray(ids) || ids.length === 0) {
+        return res.status(400).json({ message: "يرجى إرسال معرفات الفواتير" });
+    }
+    try {
+        // توليد قائمة علامات استفهام بحسب عدد العناصر
+        const placeholders = ids.map(() => '?').join(',');
+        // تحقق أن جميع الفواتير فعلاً معلقة
+        const [rows] = await pool.execute(
+            `SELECT id FROM transactions WHERE id IN (${placeholders}) AND type = 'sale' AND status = 'pending'`,
+            ids
+        );
+        if (rows.length === 0) {
+            return res.status(404).json({ message: "لم يتم العثور على فواتير معلقة بهذا المعرف." });
+        }
+        // تحديث حالة الفواتير
+        await pool.execute(
+            `UPDATE transactions SET status = 'closed' WHERE id IN (${placeholders}) AND type = 'sale' AND status = 'pending'`,
+            ids
+        );
+        res.json({ message: "تم تقفيل الفواتير بنجاح ✅" });
+    } catch (error) {
+        console.error("Close sales error:", error);
+        res.status(500).json({ message: "حدث خطأ أثناء التقفيل" });
+    }
+});
 // Settings
 app.get('/api/settings', async (req, res) => {
     try {
@@ -775,7 +820,10 @@ app.put('/api/settings', async (req, res) => {
 app.get('/api/all-transactions', async (req, res) => {
     try {
         const query = `
-            (SELECT 'sale' AS type, t.id, t.final_total AS amount, FROM_UNIXTIME(t.timestamp / 1000) AS date, CONCAT('Sale #', t.id) AS description, c.name AS party FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id WHERE t.type = 'sale')
+            (SELECT 'sale' AS type, t.id, t.final_total AS amount, FROM_UNIXTIME(t.timestamp / 1000) AS date, CONCAT('Sale #', t.id) AS description, c.name AS party 
+             FROM transactions t 
+             LEFT JOIN customers c ON t.customer_id = c.id 
+             WHERE t.type = 'sale' AND t.status = 'closed')
             UNION ALL
             (SELECT 'return' AS type, r.id, -r.total_amount AS amount, FROM_UNIXTIME(r.timestamp / 1000) AS date, CONCAT('Return for sale #', r.original_transaction_id) AS description, NULL AS party FROM returns r)
             UNION ALL
@@ -1235,7 +1283,7 @@ app.post('/api/shifts/close', async (req, res) => {
                 SUM(CASE WHEN payment_method = 'credit' THEN amount ELSE 0 END) as total_credit
             FROM transaction_payment_methods tpm
             JOIN transactions t ON tpm.transaction_id = t.id
-            WHERE t.type = 'sale' AND t.timestamp BETWEEN ? AND ?;
+           WHERE t.type = 'sale' AND t.status = 'closed' AND t.timestamp BETWEEN ? AND ?;
         `;
         const [salesRows] = await connection.execute(salesQuery, params);
         const expectedSales = salesRows[0];

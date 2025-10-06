@@ -73,4 +73,10 @@ export type SoldProductsResponse = {
   totalCount: number;
 };
 
-
+export type PendingSale = {
+  id: number;
+  seller: string;
+  customer: string | null;
+  final_total: number;
+  date: string;
+};

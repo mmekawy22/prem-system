@@ -29,7 +29,8 @@ i18n
             closeShift: "Close Shift",
             users: "Users",
             settings: "Settings",
-            logout: "Logout"
+            logout: "Logout",
+         
           }
         }
       },
@@ -62,6 +63,7 @@ i18n
             product: "المنتج",
             quantity: "الكمية",
             price: "السعر"
+          
           },
           sidebar: {
             dashboard: "لوحة التحكم",
@@ -82,7 +84,8 @@ i18n
             settings: "الإعدادات",
             logout: "تسجيل الخروج",
             manage: "إدارة",
-            system: "النظام"
+            system: "النظام",
+            closeSales:"تقفيل المبيعات"
           },
           pos: {
             title: "نقطة البيع",

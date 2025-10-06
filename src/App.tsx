@@ -64,7 +64,7 @@ import LanguageSwitcher from "./components/LanguageSwitcher";
 import InventoryCountPage from './components/inventory/InventoryCount';
 import InventoryWorksheetPage from './components/inventory/InventoryWorksheetPage';
 import SoldProductsReport from './components/reports/SoldProductsReport';
-
+import CloseSales from "./components/CloseSales";
 
 
 
@@ -202,6 +202,12 @@ function Sidebar({ isCollapsed }: { isCollapsed: boolean }) {
           icon={<FiPlusSquare size={20} />}
           labelKey="sidebar.newPurchase"
         />
+<NavItem
+  to="/close-sales"
+  permission="manage_inventory"
+  icon={<FiScissors size={20} />}
+  labelKey="sidebar.closeSales"
+/>
         <NavItem
           to="/expenses"
           permission="manage_expenses"
@@ -508,6 +514,14 @@ function App() {
                   </ProtectedRoute>
                 }
               />
+<Route
+  path="/close-sales"
+  element={
+    <ProtectedRoute permission="manage_inventory">
+      <CloseSales />
+    </ProtectedRoute>
+  }
+/>
               <Route
                 path="/expenses"
                 element={

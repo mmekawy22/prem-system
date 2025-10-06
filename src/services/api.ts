@@ -9,6 +9,7 @@ import {
 } from "../types";
 import { Row } from "../types";
 import { SoldProductsResponse } from "../types";
+import { PendingSale } from "../types";
 const api = axios.create({
   baseURL: "http://localhost:3001/api",
 });
@@ -112,5 +113,27 @@ export async function addNewProductAPI(productData: Product): Promise<Product> {
 export async function getPurchaseHistoryAPI(): Promise<PurchaseHistoryItem[]> {
   const res = await fetch("http://localhost:3001/api/purchases/history");
   if (!res.ok) throw new Error("Failed to fetch purchase history");
+  return res.json();
+}
+// ======================= Pending Sales =======================
+
+// جلب الفواتير المعلقة
+export async function getPendingSalesAPI(): Promise<any[]> {
+  const res = await fetch("http://localhost:3001/api/pending-sales");
+  if (!res.ok) throw new Error("تعذر جلب الفواتير المعلقة");
+  return res.json();
+}
+
+// تقفيل الفواتير المحددة
+export async function closeSelectedSalesAPI(ids: number[]): Promise<any> {
+  const res = await fetch("http://localhost:3001/api/close-sales", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ ids }),
+  });
+  if (!res.ok) {
+    const errorMsg = await res.json();
+    throw new Error(errorMsg.message || "تعذر تقفيل الفواتير");
+  }
   return res.json();
 }
