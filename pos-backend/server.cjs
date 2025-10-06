@@ -1089,19 +1089,24 @@ app.post('/api/returns', async (req, res) => {
             INSERT INTO return_items (return_id, product_id, quantity, price_at_return)
             VALUES (?, ?, ?, ?)
         `;
-        for (let item of items) {
-            await connection.execute(insertItemQuery, [
-                return_id,
-                item.product_id,
-                item.quantity,
-                item.price
-            ]);
+    for (let item of items) {
+        const productId = item.product_id;  
+            // 1. إدخال سجل المرتجع (لجميع الأصناف بما فيها اليدوية)
+            await connection.execute(insertItemQuery, [
+                return_id,
+                productId,
+                item.quantity,
+                item.price
+            ]);
 
-            await connection.execute(
-                'UPDATE products SET stock = stock + ? WHERE id = ?',
-                [item.quantity, item.product_id]
-            );
-        }
+            // 2. تحديث المخزون (فقط للمنتجات التي لديها ID صالح)
+            if (productId && productId > 0) {
+                await connection.execute(
+                    'UPDATE products SET stock = stock + ? WHERE id = ?',
+                    [item.quantity, productId]
+                );
+            }
+        }
 
         // ✅ وسائل الدفع
         const insertPaymentQuery = `
