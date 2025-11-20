@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { Supplier } from '../../db';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = 'http://192.168.1.20:3001';
 
 function Suppliers() {
   const { t } = useTranslation();

@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 // This is the full User type including the permissions string from the server
 interface User {

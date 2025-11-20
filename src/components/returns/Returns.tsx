@@ -39,7 +39,7 @@ function Returns() {
     setItemsToReturn({});
 
     try {
-      const response = await fetch(`http://localhost:3001/api/transactions/${searchId}`);
+      const response = await fetch(`http://192.168.1.20:3001/api/transactions/${searchId}`);
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -116,7 +116,7 @@ items: returnedItems.map(item => ({
 console.log("Return Payload Sent:", JSON.stringify(returnPayload, null, 2));
 
   try {
-    const response = await fetch('http://localhost:3001/api/returns', {
+    const response = await fetch('http://192.168.1.20:3001/api/returns', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',

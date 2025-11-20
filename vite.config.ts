@@ -6,4 +6,8 @@ export default defineConfig({
 
   // ==> Add this line <==
   base: './',
+server: {
+    host: '0.0.0.0', // هنا المهم
+    port: 3000
+  }
 })

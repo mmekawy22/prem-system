@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../../context/UserContext';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 interface ShiftReport {
   id: number;

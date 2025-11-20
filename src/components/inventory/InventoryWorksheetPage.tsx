@@ -3,7 +3,7 @@ import { useReactToPrint } from 'react-to-print';
 import { PrintWorksheet } from './PrintWorksheet'; // ✅ المسار صحيح لأن الملفين في نفس الفولدر
 import { FiPrinter, FiList } from 'react-icons/fi';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 interface DropdownItem {
     id: number | string;

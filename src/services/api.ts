@@ -1,4 +1,3 @@
-// src/services/api.ts
 import axios from "axios";
 import {
   Supplier,
@@ -10,15 +9,25 @@ import {
 import { Row } from "../types";
 import { SoldProductsResponse } from "../types";
 import { PendingSale } from "../types";
+
+// عدل هنا للـ IP الصحيح لجهاز السيرفر
+const API_IP = "192.168.1.20"; // عدل هذا ليطابق جهاز السيرفر الفعلي
+const API_PORT = "3001";
+const API_BASE = `http://${API_IP}:${API_PORT}/api`;
+
 const api = axios.create({
-  baseURL: "http://localhost:3001/api",
+  baseURL: API_BASE,
 });
 
 // ======================= Purchases =======================
 
 // البحث في المشتريات
 export const searchPurchasesAPI = async (query: string) => {
-  return await api.get(`/purchases/search?q=${query}`);
+  // لاحظ أن السيرفر يستقبل term وليس q
+  // إذا كان السيرفر يعمل بـ term، استخدم التالي:
+  return await api.get(`/purchases/search?term=${encodeURIComponent(query)}&type=invoiceId`);
+  // لو كنت تريد البحث بأنواع أخرى مثل supplierName, productName, productBarcode
+  // أضف البراميتر المناسب
 };
 
 // جلب كل المشتريات
@@ -48,7 +57,8 @@ export async function savePurchaseAPI(purchaseData: any): Promise<any> {
     user_id: userId,
   };
 
-  const res = await fetch("http://localhost:3001/api/purchases", {
+  // استخدم نفس API_BASE هنا
+  const res = await fetch(`${API_BASE}/purchases`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
@@ -61,6 +71,7 @@ export async function savePurchaseAPI(purchaseData: any): Promise<any> {
 
   return res.json();
 }
+
 export async function getSoldProductsReport(params: {
   start?: string;
   end?: string;
@@ -74,18 +85,16 @@ export async function getSoldProductsReport(params: {
     if (v !== undefined && v !== null && v !== "") qs.append(k, String(v));
   });
 
-  // استخدم الـ base URL لو احتجت، أو اعتمد على proxy في vite
-  const res = await fetch(`http://localhost:3001/api/reports/sold-products?${qs.toString()}`);
+  const res = await fetch(`${API_BASE}/reports/sold-products?${qs.toString()}`);
   if (!res.ok) throw new Error(await res.text());
   const json = await res.json();
   return json as SoldProductsResponse;
 }
 
-
 // ======================= Suppliers =======================
 
 export async function getSuppliersAPI(): Promise<Supplier[]> {
-  const res = await fetch("http://localhost:3001/api/suppliers");
+  const res = await fetch(`${API_BASE}/suppliers`);
   if (!res.ok) throw new Error("Failed to fetch suppliers");
   return res.json();
 }
@@ -93,13 +102,13 @@ export async function getSuppliersAPI(): Promise<Supplier[]> {
 // ======================= Products =======================
 
 export async function getProductsAPI(): Promise<Product[]> {
-  const res = await fetch("http://localhost:3001/api/products");
+  const res = await fetch(`${API_BASE}/products`);
   if (!res.ok) throw new Error("Failed to fetch products");
   return res.json();
 }
 
 export async function addNewProductAPI(productData: Product): Promise<Product> {
-  const res = await fetch("http://localhost:3001/api/products", {
+  const res = await fetch(`${API_BASE}/products`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(productData),
@@ -111,22 +120,23 @@ export async function addNewProductAPI(productData: Product): Promise<Product> {
 // ======================= Purchase History =======================
 
 export async function getPurchaseHistoryAPI(): Promise<PurchaseHistoryItem[]> {
-  const res = await fetch("http://localhost:3001/api/purchases/history");
+  const res = await fetch(`${API_BASE}/purchases/history`);
   if (!res.ok) throw new Error("Failed to fetch purchase history");
   return res.json();
 }
+
 // ======================= Pending Sales =======================
 
 // جلب الفواتير المعلقة
 export async function getPendingSalesAPI(): Promise<any[]> {
-  const res = await fetch("http://localhost:3001/api/pending-sales");
+  const res = await fetch(`${API_BASE}/pending-sales`);
   if (!res.ok) throw new Error("تعذر جلب الفواتير المعلقة");
   return res.json();
 }
 
 // تقفيل الفواتير المحددة
 export async function closeSelectedSalesAPI(ids: number[]): Promise<any> {
-  const res = await fetch("http://localhost:3001/api/close-sales", {
+  const res = await fetch(`${API_BASE}/close-sales`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ ids }),

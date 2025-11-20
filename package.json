@@ -7,7 +7,7 @@
   "description": "Point of Sale (POS) system built with React and Electron.",
   "author": "Your Name",
   "scripts": {
-    "dev": "concurrently -k \"vite\" \"wait-on http://localhost:5173 && electron .\"",
+    "dev": "concurrently -k \"vite\" \"wait-on http://192.168.1.20:5173 && electron .\"",
     "build": "vite build",
     "preview": "vite preview",
     "dist": "npm run build && electron-builder --win --x64"

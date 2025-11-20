@@ -80,3 +80,29 @@ export type PendingSale = {
   final_total: number;
   date: string;
 };
+// src/types.ts
+
+export interface Setting {
+  id?: number;
+  store_name?: string;
+  store_logo?: string | null;
+  address?: string;
+  phone?: string;
+  email?: string;
+  website?: string;
+  receipt_footer?: string;
+  currency_symbol?: string;
+  currency_code?: string;
+  tax_rate?: number;
+  enable_discounts?: boolean;
+  tax_mode?: 'inclusive' | 'exclusive';
+  allow_overselling?: boolean;
+  enable_wholesale?: boolean;
+  default_customer_id?: number | null;
+
+  // ✅ إضافات خاصة بعرض الإيصال
+  logo_base64?: string;   // الصورة المحولة Base64
+  shop_name?: string;     // الاسم التجاري للمتجر
+  contact_info?: string;  // معلومات الاتصال (العنوان أو الهاتف أو كليهما)
+}
+

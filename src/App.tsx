@@ -68,7 +68,7 @@ import CloseSales from "./components/CloseSales";
 
 
 
-const API_URL = "http://localhost:3001";
+const API_URL = "http://192.168.1.20:3001";
 
 // ************ Theme Hook ************
 const useTheme = () => {

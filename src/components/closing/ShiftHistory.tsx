@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 // Define the structure of a Shift object
 interface Shift {

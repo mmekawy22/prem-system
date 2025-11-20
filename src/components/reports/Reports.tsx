@@ -41,7 +41,7 @@ interface SmartLowStockItem {
     recommended_reorder_qty: number;
 }
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 // --- Main Component ---
 function Reports() {

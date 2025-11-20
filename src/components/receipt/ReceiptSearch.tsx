@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import type { Transaction, User, Customer } from '../../db';
 import Receipt from './Receipt';
 
-const API_URL = 'http://localhost:3001';
+const API_URL = 'http://192.168.1.20:3001';
 
 // ✅ This interface is now correct and will not conflict with the base Transaction type
 interface TransactionWithDetails extends Omit<Transaction, 'user' | 'customer'> {

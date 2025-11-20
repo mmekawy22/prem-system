@@ -1,8 +1,7 @@
-import React from 'react';
-import { useAuth } from '../../context/UserContext';
-import type { Transaction } from '../../db'; // Use the main Transaction type
+import React from "react";
+import { useAuth } from "../../context/UserContext";
+import { Setting } from "../../types";
 
-// The props now expect the potentially complex transaction object from various sources
 interface ReceiptProps {
   transaction: any;
 }
@@ -26,16 +25,34 @@ const Receipt: React.FC<ReceiptProps> = ({ transaction }) => {
   // ✅ This is the simplified and corrected line
   const paymentMethodsArray = Array.isArray(payment_methods) ? payment_methods : [];
 
-  return (
-    <div className="text-black text-sm font-mono p-2">
-        <div className="text-center">
-            {settings?.logo_base64 && <img src={settings.logo_base64} alt="logo" className="mx-auto h-16 w-auto"/>}
-            <h2 className="text-lg font-bold">{settings?.shop_name || 'My Shop'}</h2>
-            <p>{settings?.contact_info || ''}</p>
-            <p>Date: {new Date(timestamp).toLocaleString()}</p>
-            <p>Receipt #: {transactionId}</p>
-            <p>Cashier: {user?.username || 'N/A'}</p>
-        </div>
+return (
+  <div className="text-black text-sm font-mono p-2">
+    <div className="text-center">
+      {settings?.store_logo && (
+        <img
+          src={settings.store_logo}
+          alt="logo"
+          className="mx-auto h-16 w-auto"
+        />
+      )}
+
+      <h2 className="text-lg font-bold">
+        {settings?.store_name || "My Shop"}
+      </h2>
+
+      {/* ✅ عرض العنوان ورقم الهاتف لو موجودين */}
+      {(settings?.address || settings?.phone) && (
+        <p>
+          {settings?.address ? settings.address + " " : ""}
+          {settings?.phone ? `(${settings.phone})` : ""}
+        </p>
+      )}
+
+      <p>Date: {new Date(timestamp).toLocaleString()}</p>
+      <p>Receipt #: {transactionId}</p>
+      <p>Cashier: {user?.username || "N/A"}</p>
+   
+  </div>
         
         {customer?.name && (
             <div className="mt-4 border-t border-dashed border-black pt-2">
@@ -86,7 +103,7 @@ const Receipt: React.FC<ReceiptProps> = ({ transaction }) => {
         )}
 
         <div className="text-center mt-4">
-            <p>Thank you for your purchase!</p>
+            <p>زيارتكم شرف لنا</p>
         </div>
     </div>
   );

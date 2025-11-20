@@ -4,7 +4,7 @@ import { FiCheckCircle, FiPlayCircle, FiSearch, FiPrinter } from 'react-icons/fi
 import { useReactToPrint } from 'react-to-print';
 import { PrintWorksheet } from './PrintWorksheet';
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 // --- Interfaces ---
 interface CountItem {

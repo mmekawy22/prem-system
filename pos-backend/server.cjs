@@ -6,11 +6,37 @@ const saltRounds = 10;
 const fs = require('fs/promises');
 const path = require('path');
 
+let USER_UPLOADS_DIR;
+
+// نحاول نجيب Electron لو متاح
+let electronApp;
+try {
+  const electron = require('electron');
+  // electron.app موجود فقط في الـ main process
+  electronApp = electron.app || (electron.remote && electron.remote.app);
+} catch {
+  electronApp = null; // Electron مش متاح
+}
+
+// نحدد المسار حسب البيئة
+if (electronApp && electronApp.getPath) {
+  USER_UPLOADS_DIR = path.join(electronApp.getPath('userData'), 'uploads');
+} else {
+  // لو مش Electron، نحفظ الملفات داخل فولدر المشروع
+  USER_UPLOADS_DIR = path.join(__dirname, 'uploads');
+}
+
+// نتأكد إن الفولدر موجود
+fs.mkdir(USER_UPLOADS_DIR, { recursive: true }).catch(() => {});
+
 const app = express();
 const port = 3001;
 
 app.use(cors());
 app.use(express.json({ limit: '10mb' }));
+
+// مشاركة مجلد الرفع
+app.use('/uploads', express.static(USER_UPLOADS_DIR));
 
 const dbConfig = {
     host: 'localhost',
@@ -241,10 +267,29 @@ app.get('/api/reports/low-stock', async (req, res) => {
 });
 
 // Customers CRUD
+// Customers CRUD (With Search)
 app.get('/api/customers', async (req, res) => {
+    // 1. احصل على مصطلح البحث 'q' من الرابط
+    const { q } = req.query;
+
     try {
-        const [rows] = await pool.execute('SELECT * FROM customers ORDER BY name ASC');
+        let query = 'SELECT * FROM customers';
+        const params = [];
+
+        // 2. إذا كان هناك مصطلح بحث، قم ببناء جملة WHERE
+        if (q && q.trim() !== '') {
+            const searchTerm = `%${q.trim()}%`;
+            // ابحث في الاسم، الهاتف، أو الإيميل
+            query += ' WHERE name LIKE ? OR phone LIKE ? OR email LIKE ?';
+            params.push(searchTerm, searchTerm, searchTerm);
+        }
+
+        query += ' ORDER BY name ASC';
+        
+        // 3. نفذ الاستعلام
+        const [rows] = await pool.execute(query, params);
         res.json(rows);
+
     } catch (error) {
         console.error("Fetch customers error:", error);
         res.status(500).json({ error: 'Failed to fetch customers.' });
@@ -292,7 +337,56 @@ app.delete('/api/customers/:id', async (req, res) => {
         res.status(500).json({ error: 'Failed to delete customer.' });
     }
 });
+// CUSTOMER HISTORY (Product-level detail)
+app.get('/api/customers/:id/product-history', async (req, res) => {
+    const { id } = req.params;
+    if (!id) return res.status(400).json({ error: 'Customer ID is required.' });
 
+    try {
+        const query = `
+            (
+                -- جلب الأصناف المباعة (تم التأكد من صحة ti.price)
+                SELECT
+                    'Sale' as type,
+                    t.timestamp,
+                    t.id as reference_id,
+                    p.name as product_name,
+                    ti.quantity,
+                    ti.price  as price 
+                FROM transactions t
+                JOIN transaction_items ti ON t.id = ti.transaction_id
+                JOIN products p ON ti.product_id = p.id
+                WHERE t.customer_id = ? AND t.type = 'sale' AND t.status = 'closed'
+            )
+            UNION ALL
+            (
+                -- جلب الأصناف المرتجعة (باستخدام price_at_return)
+                SELECT
+                    'Return' as type,
+                    r.timestamp,
+                    r.original_transaction_id as reference_id,
+                    p.name as product_name,
+                    ri.quantity,
+                    ri.price_at_return as price -- *** تم استخدام price_at_return بناءً على هيكل جدولك ***
+                FROM returns r
+                JOIN return_items ri ON r.id = ri.return_id
+                -- نربط بالـ transaction الأصلية لنعرف من هو العميل
+                JOIN transactions t ON r.original_transaction_id = t.id 
+                JOIN products p ON ri.product_id = p.id
+                WHERE t.customer_id = ?
+            )
+            ORDER BY timestamp DESC
+        `;
+
+        const [rows] = await pool.execute(query, [id, id]);
+        res.json(rows);
+
+    } catch (error) {
+        // نترك رسالة الخطأ هنا في حال وجود مشكلة أخرى غير متوقعة
+        console.error(`SQL/DB Error Fetching customer product history for id ${id}:`, error.message || error);
+        res.status(500).json({ error: 'Failed to fetch customer product history.', details: error.message });
+    }
+});
 // Suppliers CRUD
 app.get('/api/suppliers', async (req, res) => {
     try {
@@ -770,32 +864,47 @@ app.post('/api/close-sales', async (req, res) => {
         res.status(500).json({ message: "حدث خطأ أثناء التقفيل" });
     }
 });
-// Settings
+
+
+
+// ✅ GET settings
 app.get('/api/settings', async (req, res) => {
     try {
         const [rows] = await pool.execute('SELECT * FROM settings WHERE id = 1');
         if (rows.length === 0) return res.status(404).json({ error: 'Settings not found.' });
-        res.json(rows[0]);
+
+        const setting = rows[0];
+
+        // ✅ أضف رابط الصورة الكامل فقط عند الإرجاع
+        if (setting.store_logo && !setting.store_logo.startsWith('http')) {
+            setting.store_logo = `http://192.168.1.20:3001${setting.store_logo}`;
+        }
+
+        res.json(setting);
     } catch (error) {
         console.error("Fetch settings error:", error);
         res.status(500).json({ error: 'Failed to fetch settings.' });
     }
 });
 
+
+// ✅ PUT settings (تحديث)
 app.put('/api/settings', async (req, res) => {
     const settings = req.body;
     try {
+        // ✅ لو الصورة مرفوعة كـ Base64
         if (settings.store_logo && settings.store_logo.startsWith('data:image')) {
             const base64Data = settings.store_logo.replace(/^data:image\/\w+;base64,/, "");
             const buffer = Buffer.from(base64Data, 'base64');
             const extension = settings.store_logo.split(';')[0].split('/')[1];
             const fileName = `logo-${Date.now()}.${extension}`;
-            const uploadsDir = path.join(__dirname, 'public/uploads');
-            await fs.mkdir(uploadsDir, { recursive: true }); // Ensure directory exists
+            const uploadsDir = USER_UPLOADS_DIR;
+            await fs.mkdir(uploadsDir, { recursive: true }); // تأكد أن المجلد موجود
             const imagePath = path.join(uploadsDir, fileName);
             await fs.writeFile(imagePath, buffer);
-            settings.store_logo = `/uploads/${fileName}`;
+            settings.store_logo = `/uploads/${fileName}`; // نحفظ المسار النسبي فقط
         }
+
         const sql = `
             UPDATE settings SET 
                 store_name = ?, store_logo = ?, address = ?, phone = ?, 
@@ -803,18 +912,23 @@ app.put('/api/settings', async (req, res) => {
                 currency_code = ?, tax_rate = ?, enable_discounts = ?, tax_mode = ?,
                 allow_overselling = ?, enable_wholesale = ?, default_customer_id = ?
             WHERE id = 1`;
+
+        console.log("🟢 Received settings:", settings);
+
         await pool.execute(sql, [
             settings.store_name, settings.store_logo, settings.address, settings.phone,
             settings.email, settings.website, settings.receipt_footer, settings.currency_symbol,
             settings.currency_code, settings.tax_rate, settings.enable_discounts, settings.tax_mode,
             settings.allow_overselling, settings.enable_wholesale, settings.default_customer_id
         ]);
+
         res.json({ message: 'Settings updated successfully!' });
     } catch (error) {
         console.error("Update settings error:", error);
         res.status(500).json({ error: 'Failed to update settings.' });
     }
 });
+
 
 // All Transactions
 app.get('/api/all-transactions', async (req, res) => {
@@ -1241,11 +1355,12 @@ app.post('/api/transactions', async (req, res) => {
             await connection.execute(`INSERT INTO transaction_payment_methods (transaction_id, payment_method, amount) VALUES (?, ?, ?)`, [newTransactionId, payment.method, payment.amount]);
         }
         for (const item of items) {
+            const itemDiscountValue = item.discount || 0;
             if (item.id > 0) {
-                await connection.execute(`INSERT INTO transaction_items (transaction_id, product_id, quantity, price, discount) VALUES (?, ?, ?, ?, ?)`, [newTransactionId, item.id, item.quantity, item.price, 0]);
+                await connection.execute(`INSERT INTO transaction_items (transaction_id, product_id, quantity, price, discount) VALUES (?, ?, ?, ?, ?)`, [newTransactionId, item.id, item.quantity, item.price,itemDiscountValue]);
                 await connection.execute('UPDATE products SET stock = stock - ? WHERE id = ?', [item.quantity, item.id]);
             } else {
-                await connection.execute(`INSERT INTO transaction_items (transaction_id, product_id, quantity, price, discount, item_name, item_price) VALUES (?, ?, ?, ?, ?, ?, ?)`, [newTransactionId, null, item.quantity, item.price, 0, item.name, item.price]);
+                await connection.execute(`INSERT INTO transaction_items (transaction_id, product_id, quantity, price, discount, item_name, item_price) VALUES (?, ?, ?, ?, ?, ?, ?)`, [newTransactionId, null, item.quantity, item.price, itemDiscountValue, item.name, item.price]);
             }
         }
         await connection.commit();
@@ -1415,6 +1530,6 @@ app.use((err, req, res, next) => {
 
 
 // Start Server
-app.listen(port, () => {
-    console.log(`✅ Server is stable and listening on http://localhost:${port}`);
+app.listen(port, '0.0.0.0', () => {
+    console.log(`✅ Server is stable and listening on http://0.0.0.0:${port}`);
 });

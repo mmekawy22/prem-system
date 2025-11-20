@@ -1,13 +1,12 @@
 import React from 'react';
 import BarcodePrint from './BarcodePrint';
 
-// This interface now includes quantity
 interface Item {
   id?: number;
   name: string;
   barcode: string;
   price: number;
-  quantity: number; // The quantity from the invoice item
+  quantity: number; 
 }
 
 interface BarcodeSheetProps {
@@ -15,10 +14,6 @@ interface BarcodeSheetProps {
 }
 
 function BarcodeSheet({ items }: BarcodeSheetProps) {
-  // This is the new logic:
-  // We create a new flat array that repeats each item based on its quantity.
-  // For example, if we have one item with quantity: 3,
-  // this will create an array of 3 identical items to be printed.
   const allItemsToPrint = items.flatMap(item => 
     Array(item.quantity).fill(item)
   );
@@ -28,19 +23,29 @@ function BarcodeSheet({ items }: BarcodeSheetProps) {
       <style>
         {`
           @media print {
-            @page { size: A4; margin: 1cm; }
-            body { -webkit-print-color-adjust: exact; }
+            body {
+              margin: 0;
+              padding: 0;
+            }
+            .barcode-label-wrapper {
+              page-break-after: always !important;
+            }
+            
+            /* * هذا هو التعديل الجديد:
+             * يمنع إضافة صفحة جديدة (فارغة) بعد آخر ليبل
+             */
+            .barcode-label-wrapper:last-child {
+              page-break-after: auto !important;
+            }
           }
         `}
       </style>
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(4, 1fr)',
-        gap: '20px',
-      }}>
-        {/* We now map over the new array to print all barcodes */}
+      
+      <div>
         {allItemsToPrint.map((item, index) => (
-          <BarcodePrint key={`${item.id}-${index}`} product={item} />
+          <div key={`${item.id}-${index}`} className="barcode-label-wrapper">
+            <BarcodePrint product={item} />
+          </div>
         ))}
       </div>
     </div>

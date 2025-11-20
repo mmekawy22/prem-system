@@ -10,7 +10,7 @@ import { InventoryListPrint } from './InventoryListPrint';
 import CreatableSelect from 'react-select/creatable';
 import { createRoot } from "react-dom/client";
 
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 interface HistoryLog {
     type: string;

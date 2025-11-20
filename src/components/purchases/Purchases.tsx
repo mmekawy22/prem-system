@@ -1,12 +1,10 @@
-// src/components/purchases/Purchases.tsx
 import React, { useEffect, useRef, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { useTranslation } from "react-i18next";
 import CreatableSelect from "react-select/creatable";
 import { useReactToPrint } from "react-to-print";
-import BarcodeSheet from "../inventory/BarcodeSheet"; // افتراض أن الملف موجود
+import BarcodeSheet from "../inventory/BarcodeSheet";
 import { useAuth } from "../../context/UserContext";
-
 
 import type {
   Supplier,
@@ -16,28 +14,19 @@ import type {
 } from "../../types";
 import {
   getSuppliersAPI,
-  // getProductsAPI, // إذا موجودة في services/api استخدمها — خلاف ذلك استخدم fetch محلي
   fetchPurchases as fetchPurchasesAPI,
   savePurchaseAPI,
   addNewProductAPI,
   searchPurchasesAPI,
- getPurchaseDetailsAPI 
+  getPurchaseDetailsAPI,
 } from "../../services/api";
 
-/**
- * ملاحظات:
- * - هذا الملف مبني بحيث يعمل حتى لو كانت بعض دوال services/api تعيد Axios response (نستخدم `.data || res`)
- * - لتجنُّب أخطاء TypeScript مع react-to-print، قمنا بعمل cast على خيارات الطباعة إلى `any`.
- */
-
-const API_BASE = "http://localhost:3001/api"; // (احتياطي)
-
-/* ---------- Component ---------- */
-
+const API_BASE = "http://192.168.1.20:3001/api"; // تأكد من وضع IP صحيح للسيرفر
 
 const Purchases: React.FC = () => {
   const { t } = useTranslation();
-const { user } = useAuth();
+  const { user } = useAuth();
+
   // ----- Modes -----
   const [viewMode, setViewMode] = useState<"create" | "search">("create");
 
@@ -75,22 +64,15 @@ const { user } = useAuth();
   >("invoiceId");
   const [searchTerm, setSearchTerm] = useState("");
   const [submittedSearch, setSubmittedSearch] = useState("");
-  const [searchResults, setSearchResults] = useState<PurchaseHistoryItem[]>(
-    []
-  );
-  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(
-    null
-  );
+  const [searchResults, setSearchResults] = useState<PurchaseHistoryItem[]>([]);
+  const [selectedInvoiceId, setSelectedInvoiceId] = useState<number | null>(null);
   const [invoiceItems, setInvoiceItems] = useState<PurchaseItemDetail[]>([]);
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
   const [isDetailsError, setIsDetailsError] = useState(false);
 
   // ----- Printing -----
-  const componentRef = useRef<HTMLDivElement | null>(null); // for react-to-print
-  // iframe printing for barcode sheet
-  const [itemsToPrint, setItemsToPrint] = useState<PurchaseItemDetail[] | null>(
-    null
-  );
+  const componentRef = useRef<HTMLDivElement | null>(null);
+  const [itemsToPrint, setItemsToPrint] = useState<PurchaseItemDetail[] | null>(null);
 
   // ======================================================
   // Load initial data: suppliers + products + latest purchases
@@ -104,38 +86,29 @@ const { user } = useAuth();
           const data = (res as any).data || res || [];
           setSuppliers(data);
         } catch (err) {
-          console.warn("getSuppliersAPI failed, trying fetch fallback", err);
           try {
             const r = await fetch(`${API_BASE}/suppliers`);
             if (r.ok) setSuppliers(await r.json());
           } catch {}
         }
 
-        // products (fetch directly if no helper)
+        // products
         try {
-          // if you have getProductsAPI in services, use it
           const r = await fetch(`${API_BASE}/products`);
           if (r.ok) {
             const p = await r.json();
             setProducts(p || []);
           }
-        } catch (err) {
-          console.warn("Failed to load products", err);
-        }
+        } catch (err) {}
 
         // purchases (latest)
         try {
           const res = await fetchPurchasesAPI();
           const data = (res as any).data || res || [];
-          setSearchResults(Array.isArray(data) ? data : []); // store as default list
-        } catch (err) {
-          console.warn("fetchPurchasesAPI failed", err);
-        }
-      } catch (error) {
-        console.error("Initial load error", error);
-      }
+          setSearchResults(Array.isArray(data) ? data : []);
+        } catch (err) {}
+      } catch (error) {}
     };
-
     loadInitial();
   }, []);
 
@@ -145,9 +118,7 @@ const { user } = useAuth();
   const addProductToPurchase = (product: Product) => {
     if (!product || typeof product.id === "undefined" || product.id === null)
       return;
-    // prevent duplicates
     if (purchaseCart.some((i) => i.id === product.id)) return;
-
     const item = {
       ...product,
       quantity: 1,
@@ -202,13 +173,9 @@ const { user } = useAuth();
     };
 
     try {
-      // call saved API
       const res = await savePurchaseAPI(payload).catch((e) => {
-        // if service returns axios response object: throw-like -> treat as ok check below
         throw e;
       });
-      // if using axios: res.data; if fetch: res is JSON; handle both
-      // After saving, clear cart and optionally print barcodes
       const savedForPrint: PurchaseItemDetail[] = purchaseCart.map((p) => ({
         id: p.id,
         product_name: p.name,
@@ -220,8 +187,6 @@ const { user } = useAuth();
 
       setPurchaseCart([]);
       setSelectedSupplierId("");
-
-      // query refresh — if you use react-query you would invalidate here
 
       const confirmPrint = window.confirm(
         t(
@@ -235,7 +200,6 @@ const { user } = useAuth();
         alert(t("purchases.saveSuccess", "Purchase order saved successfully!"));
       }
     } catch (error: any) {
-      console.error("Save purchase failed", error);
       alert(
         t(
           "purchases.saveError",
@@ -273,10 +237,8 @@ const { user } = useAuth();
       const added = await addNewProductAPI(payload);
       const data = (added as any).data || added;
       if (data) {
-        // add to products list and to cart
         if (Array.isArray(products)) setProducts((p) => [...p, data]);
         else setProducts([data]);
-        // add to purchase immediately (ensure it has id)
         if (data.id) addProductToPurchase(data as Product);
       }
       setIsAddProductModalOpen(false);
@@ -289,7 +251,6 @@ const { user } = useAuth();
         wholesale_price: "",
       });
     } catch (err) {
-      console.error("Add product failed", err);
       alert(t("purchases.addNewProductError", "Failed to add new product."));
     }
   };
@@ -316,7 +277,6 @@ const { user } = useAuth();
       return;
     }
 
-    // render BarcodeSheet inside iframe using createRoot
     const rootContainer = doc.createElement("div");
     doc.body.appendChild(rootContainer);
 
@@ -345,7 +305,6 @@ const { user } = useAuth();
         }, 500);
       }, 300);
     } catch (err) {
-      console.error("Print iframe error", err);
       if (document.body.contains(printIframe)) document.body.removeChild(printIframe);
       setItemsToPrint(null);
     }
@@ -361,15 +320,12 @@ const { user } = useAuth();
 
     setSubmittedSearch(term);
     try {
-      // searchPurchasesAPI may be axios or fetch; handle both
       const res = await searchPurchasesAPI(term).catch((err) => {
-        // if service not available, fallback local fetch
         throw err;
       });
       const data = (res as any).data || res || [];
       setSearchResults(Array.isArray(data) ? data : []);
     } catch (err) {
-      // fallback: try fetch endpoint with type
       try {
         const url = `${API_BASE}/purchases/search?term=${encodeURIComponent(term)}&type=${encodeURIComponent(searchType)}`;
         const r = await fetch(url);
@@ -379,32 +335,31 @@ const { user } = useAuth();
           return;
         }
       } catch {}
-      console.error("Search failed", err);
       alert(t("purchases.searchError", "Failed to search purchases."));
     }
   };
 
-const handleSelectInvoice = async (id: number) => {
-  setSelectedInvoiceId(id);
-  setIsLoadingDetails(true);
-  setIsDetailsError(false);
-  try {
-    // استدعاء API الصحيح
-    const details = await getPurchaseDetailsAPI(id);
-
-    if (Array.isArray(details)) {
-      setInvoiceItems(details);
-    } else {
+  // ======================================================
+  // تفاصيل الفاتورة عند الضغط على View
+  // ======================================================
+  const handleSelectInvoice = async (id: number) => {
+    setSelectedInvoiceId(id);
+    setIsLoadingDetails(true);
+    setIsDetailsError(false);
+    try {
+      const details = await getPurchaseDetailsAPI(id);
+      if (Array.isArray(details)) {
+        setInvoiceItems(details);
+      } else {
+        setInvoiceItems([]);
+      }
+    } catch (err) {
       setInvoiceItems([]);
+      setIsDetailsError(true);
+    } finally {
+      setIsLoadingDetails(false);
     }
-  } catch (err) {
-    console.error("Fetch invoice details failed", err);
-    setInvoiceItems([]);
-    setIsDetailsError(true);
-  } finally {
-    setIsLoadingDetails(false);
-  }
-};
+  };
 
   // ======================================================
   // category options
@@ -422,7 +377,8 @@ const handleSelectInvoice = async (id: number) => {
           p.name.toLowerCase().includes(productSearchTerm.toLowerCase()) ||
           (p.barcode && p.barcode.includes(productSearchTerm))
       )
-    : products.slice(0, 50); // limit if empty to first 50
+    : products.slice(0, 50);
+
   // ======================================================
   // Render JSX
   // ======================================================
@@ -432,7 +388,6 @@ const handleSelectInvoice = async (id: number) => {
         <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">
           {t("purchases.title", "Purchases")}
         </h2>
-
         <div className="bg-gray-200 dark:bg-slate-700 p-1 rounded-lg">
           <button
             onClick={() => setViewMode("create")}
@@ -460,12 +415,10 @@ const handleSelectInvoice = async (id: number) => {
       {/* ---------------- CREATE MODE ---------------- */}
       {viewMode === "create" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left: cart + save */}
           <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-md flex flex-col">
             <h3 className="text-2xl font-bold mb-4 dark:text-slate-200">
               {t("purchases.newTitle", "New Purchase Order")}
             </h3>
-
             <div className="mb-4">
               <label className="block font-semibold mb-1 dark:text-slate-300">
                 {t("purchases.supplier", "Supplier")}
@@ -483,7 +436,6 @@ const handleSelectInvoice = async (id: number) => {
                 ))}
               </select>
             </div>
-
             <div className="flex-grow max-h-[50vh] overflow-y-auto">
               <table className="min-w-full">
                 <thead className="sticky top-0 bg-gray-100 dark:bg-slate-700">
@@ -531,7 +483,6 @@ const handleSelectInvoice = async (id: number) => {
                 </tbody>
               </table>
             </div>
-
             <div className="border-t dark:border-slate-700 mt-auto pt-4">
               <p className="font-bold text-xl text-right dark:text-slate-200">
                 {t("purchases.total", "Total")}: {calculateTotal().toFixed(2)} EGP
@@ -545,8 +496,6 @@ const handleSelectInvoice = async (id: number) => {
               </button>
             </div>
           </div>
-
-          {/* Right: add products */}
           <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-md">
             <div className="flex justify-between items-center mb-4">
               <h3 className="text-xl font-semibold dark:text-slate-200">{t("purchases.addProduct", "Add Products")}</h3>
@@ -554,7 +503,6 @@ const handleSelectInvoice = async (id: number) => {
                 {t("purchases.newProduct", "+ New Product")}
               </button>
             </div>
-
             <input
               type="text"
               placeholder={t("purchases.searchPlaceholder", "Search...")}
@@ -562,7 +510,6 @@ const handleSelectInvoice = async (id: number) => {
               onChange={(e) => setProductSearchTerm(e.target.value)}
               className="w-full p-2 mb-4 border rounded dark:bg-slate-700 dark:border-slate-600"
             />
-
             <div className="max-h-[65vh] overflow-y-auto">
               {filteredProducts.map((p) => (
                 <div key={p.id} onClick={() => addProductToPurchase(p)} className="p-2 border-b dark:border-slate-700 hover:bg-gray-100 dark:hover:bg-slate-700 cursor-pointer flex justify-between dark:text-slate-300">
@@ -572,33 +519,30 @@ const handleSelectInvoice = async (id: number) => {
               ))}
               {filteredProducts.length === 0 && <p className="p-3 text-center dark:text-slate-300">No products found.</p>}
             </div>
-          </div>
-
-          {/* Add product modal */}
-          {isAddProductModalOpen && (
-            <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-              <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-lg">
-                <h3 className="text-2xl font-bold mb-4 dark:text-slate-200">{t("purchases.modalAddTitle", "Add New Product")}</h3>
-                <form onSubmit={(e) => { e.preventDefault(); handleAddNewProduct(); }}>
-                  <div className="grid grid-cols-2 gap-4">
-                    <input name="name" type="text" value={newProductData.name} onChange={(e) => setNewProductData((p) => ({ ...p, name: e.target.value }))} placeholder={t("purchases.productName", "Product Name")} className="p-2 border rounded col-span-2 dark:bg-slate-700 dark:border-slate-600" required />
-                    <input name="price" type="number" value={newProductData.price || ""} onChange={(e) => setNewProductData((p) => ({ ...p, price: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.retailPrice", "Retail Price")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" required />
-                    <input name="cost" type="number" value={newProductData.cost || ""} onChange={(e) => setNewProductData((p) => ({ ...p, cost: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.cost", "Cost")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" />
-                    <CreatableSelect isClearable placeholder={t("purchases.category", "Category")} options={categoryOptions} onChange={(opt: any) => setNewProductData((p) => ({ ...p, category: opt ? opt.value : "" }))} formatCreateLabel={(inputValue: string) => `Create "${inputValue}"`} />
-                    <input name="wholesale_price" type="number" value={newProductData.wholesale_price || ""} onChange={(e) => setNewProductData((p) => ({ ...p, wholesale_price: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.wholesalePrice", "Wholesale Price")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" />
-                    <input name="min_stock" type="number" value={newProductData.min_stock || ""} onChange={(e) => setNewProductData((p) => ({ ...p, min_stock: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.minimumStock", "Minimum Stock")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" />
-                  </div>
-                  <div className="mt-6 flex justify-end gap-4">
-                    <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-4 rounded">{t("purchases.modalCancel", "Cancel")}</button>
-                    <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">{t("purchases.modalSaveAndAdd", "Save and Add to Purchase")}</button>
-                  </div>
-                </form>
+            {isAddProductModalOpen && (
+              <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+                <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-xl w-full max-w-lg">
+                  <h3 className="text-2xl font-bold mb-4 dark:text-slate-200">{t("purchases.modalAddTitle", "Add New Product")}</h3>
+                  <form onSubmit={(e) => { e.preventDefault(); handleAddNewProduct(); }}>
+                    <div className="grid grid-cols-2 gap-4">
+                      <input name="name" type="text" value={newProductData.name} onChange={(e) => setNewProductData((p) => ({ ...p, name: e.target.value }))} placeholder={t("purchases.productName", "Product Name")} className="p-2 border rounded col-span-2 dark:bg-slate-700 dark:border-slate-600" required />
+                      <input name="price" type="number" value={newProductData.price || ""} onChange={(e) => setNewProductData((p) => ({ ...p, price: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.retailPrice", "Retail Price")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" required />
+                      <input name="cost" type="number" value={newProductData.cost || ""} onChange={(e) => setNewProductData((p) => ({ ...p, cost: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.cost", "Cost")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" />
+                      <CreatableSelect isClearable placeholder={t("purchases.category", "Category")} options={categoryOptions} onChange={(opt: any) => setNewProductData((p) => ({ ...p, category: opt ? opt.value : "" }))} formatCreateLabel={(inputValue: string) => `Create "${inputValue}"`} />
+                      <input name="wholesale_price" type="number" value={newProductData.wholesale_price || ""} onChange={(e) => setNewProductData((p) => ({ ...p, wholesale_price: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.wholesalePrice", "Wholesale Price")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" />
+                      <input name="min_stock" type="number" value={newProductData.min_stock || ""} onChange={(e) => setNewProductData((p) => ({ ...p, min_stock: e.target.value === "" ? "" : Number(e.target.value) }))} placeholder={t("purchases.minimumStock", "Minimum Stock")} className="p-2 border rounded dark:bg-slate-700 dark:border-slate-600" />
+                    </div>
+                    <div className="mt-6 flex justify-end gap-4">
+                      <button type="button" onClick={() => setIsAddProductModalOpen(false)} className="bg-gray-300 hover:bg-gray-400 text-black font-bold py-2 px-4 rounded">{t("purchases.modalCancel", "Cancel")}</button>
+                      <button type="submit" className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded">{t("purchases.modalSaveAndAdd", "Save and Add to Purchase")}</button>
+                    </div>
+                  </form>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       )}
-
       {/* ---------------- SEARCH MODE ---------------- */}
       {viewMode === "search" && (
         <div className="space-y-6">
@@ -610,7 +554,6 @@ const handleSelectInvoice = async (id: number) => {
                 <option value="productName">{t("purchases.searchTypes.productName", "Product Name")}</option>
                 <option value="productBarcode">{t("purchases.searchTypes.productBarcode", "Product Barcode")}</option>
               </select>
-
               <input
                 type={searchType === "invoiceId" ? "number" : "text"}
                 placeholder={searchType === "invoiceId" ? t("purchases.placeholder.invoiceId","Enter Invoice ID") : t("purchases.placeholder.productName","Enter search term")}
@@ -618,11 +561,9 @@ const handleSelectInvoice = async (id: number) => {
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="p-2 border rounded w-full dark:bg-slate-700 dark:border-slate-600"
               />
-
               <button type="submit" className="bg-blue-500 text-white px-6 py-2 rounded flex-shrink-0">
                 {t("general.search", "Search")}
               </button>
-
               {submittedSearch && (
                 <button type="button" onClick={() => { setSearchTerm(""); setSubmittedSearch(""); setSearchResults([]); setSelectedInvoiceId(null); }} className="bg-gray-500 text-white px-4 py-2 rounded flex-shrink-0">
                   {t("general.reset","Reset")}
@@ -630,13 +571,10 @@ const handleSelectInvoice = async (id: number) => {
               )}
             </form>
           </div>
-
           {/* Results */}
           <div className="bg-white dark:bg-slate-800 p-4 rounded-lg shadow-md">
             <h3 className="font-semibold mb-2 dark:text-slate-200">{submittedSearch ? `Results for "${submittedSearch}"` : t("purchases.allInvoicesHeader","Latest Purchase Invoices")}</h3>
-
             {searchResults.length === 0 && submittedSearch.trim() !== "" && <p className="dark:text-slate-300">No results found.</p>}
-
             {searchResults.length > 0 && (
               <div className="max-h-[60vh] overflow-y-auto">
                 <table className="min-w-full text-sm">
@@ -668,7 +606,6 @@ const handleSelectInvoice = async (id: number) => {
               </div>
             )}
           </div>
-
           {/* Selected invoice details */}
           {selectedInvoiceId && (
             <div className="bg-white dark:bg-slate-800 p-6 rounded-lg shadow-md">
@@ -682,7 +619,6 @@ const handleSelectInvoice = async (id: number) => {
                       <button onClick={() => setSelectedInvoiceId(null)} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mr-2">Back</button>
                     </div>
                   </div>
-
                   <div className="max-h-[50vh] overflow-y-auto">
                     <table className="min-w-full text-sm">
                       <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0">
@@ -707,7 +643,6 @@ const handleSelectInvoice = async (id: number) => {
                       </tbody>
                     </table>
                   </div>
-
                   <div className="border-t dark:border-slate-700 mt-4 pt-4">
                     <p className="font-bold text-xl text-right dark:text-slate-200">
                       Total: {invoiceItems.reduce((s, it) => s + it.cost_price * it.quantity, 0).toFixed(2)} EGP
@@ -715,7 +650,6 @@ const handleSelectInvoice = async (id: number) => {
                   </div>
                 </>
               )}
-
               {!isLoadingDetails && !isDetailsError && invoiceItems.length === 0 && (
                 <p className="dark:text-slate-300">Invoice details not found or empty.</p>
               )}
@@ -723,13 +657,10 @@ const handleSelectInvoice = async (id: number) => {
           )}
         </div>
       )}
-
       {/* Hidden area used by react-to-print */}
       <div style={{ display: "none" }}>
         <div ref={componentRef as any}>
-          {/* build a print-friendly view of the current invoice/cart */}
           <h2>Purchase Print</h2>
-          {/* Simple table (you can style for printing) */}
           <table>
             <thead>
               <tr><th>Product</th><th>Qty</th><th>Cost</th><th>Total</th></tr>

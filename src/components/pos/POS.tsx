@@ -14,7 +14,7 @@ interface Payment {
     amount: number;
 }
 
-const API_URL = 'http://localhost:3001';
+const API_URL = 'http://192.168.1.20:3001';
 
 const POS: React.FC = () => {
     const { user } = useAuth();
@@ -463,7 +463,7 @@ const POS: React.FC = () => {
                                         <div className="flex justify-between"><span>{t('pos.subtotal')}:</span><span>{subtotal.toFixed(2)} EGP</span></div>
                                         <div className="flex justify-between text-red-500"><span>{t('pos.discount')}:</span><span>- {discountAmount.toFixed(2)} EGP</span></div>
                                         <div className="flex justify-between text-2xl font-bold text-blue-600 dark:text-blue-400 border-t dark:border-slate-600 pt-2 mt-2"><span>{t('pos.totalDue')}:</span><span>{finalTotal.toFixed(2)} EGP</span></div>
-                                        <div className="flex justify-between text-lg"><span>{t('pos.totalPaid')}:</span><span>{payments.reduce((sum, p) => sum + Number(p.amount || 0), 0).toFixed(2)} EGP</span></div>
+                                        <div className="flex justify-between text-lg"><span>{t('pos.totalPaid')}:</span><span>{finalTotal.toFixed(2)} EGP</span></div>
                                     </div>
                                 </div>
                                 <div className="space-y-4">

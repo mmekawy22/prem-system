@@ -15,7 +15,7 @@ interface Expense {
 }
 
 // ✅ 2. تعريف الرابط الأساسي للـ API
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 function Expenses() {
     const { t } = useTranslation();

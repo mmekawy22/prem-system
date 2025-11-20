@@ -10,7 +10,7 @@ interface TransactionItem {
     description: string;
     party: string | null;
 }
-const API_URL = 'http://localhost:3001/api';
+const API_URL = 'http://192.168.1.20:3001/api';
 
 // --- Helper Functions ---
 const formatType = (type: string) => type.charAt(0).toUpperCase() + type.slice(1);
