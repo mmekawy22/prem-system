@@ -14,7 +14,7 @@ interface Payment {
     amount: number;
 }
 
-const API_URL = 'http://192.168.1.20:3001';
+const API_URL = 'http://192.168.1.11:3001';
 
 const POS: React.FC = () => {
     const { user } = useAuth();
@@ -107,7 +107,19 @@ const POS: React.FC = () => {
             alert("Could not fetch customers from server.");
         }
     };
-    
+    // أضف هذا الكود داخل مكون POS في ملف POS.tsx
+useEffect(() => {
+    const subtotal = calculateTotal();
+    const discountAmount = discountType === 'percentage' 
+        ? (subtotal * discountValue) / 100 
+        : discountValue;
+    const finalTotal = subtotal - discountAmount;
+
+    // تحديث أول طريقة دفع (Cash) لتساوي الصافي الجديد
+    if (payments.length === 1) {
+        setPayments([{ ...payments[0], amount: finalTotal }]);
+    }
+}, [discountValue, discountType]);
     useEffect(() => {
         fetchProductsFromAPI();
         fetchCustomersFromAPI();
@@ -178,23 +190,35 @@ const POS: React.FC = () => {
     const handleFinalizeSale = async (subtotal: number, discountAmount: number, finalTotal: number) => {
         if (!user) return;
         const totalPaid = payments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+        if (Math.abs(totalPaid - finalTotal) > 0.01) {
+    alert("تنبيه: مجموع مبالغ الدفع لا يساوي إجمالي الفاتورة بعد الخصم!");
+    return;
+}
 
         if (totalPaid < finalTotal) {
             alert('The total amount paid is less than the final total.'); // This can be translated too
             return;
         }
 
-        const transactionPayload = {
-            total: subtotal,
-            discount: discountAmount,
-            final_total: finalTotal,
-            payment_methods: payments,
-            user_id: user.id!,
-            notes: notes,
-            is_delivery: isDelivery,
-            customer_id: selectedCustomerId,
-            items: activeCart
-        };
+        // ✅ حساب نسبة الخصم الإجمالية لتوزيعها على الأصناف
+const discountRate = subtotal > 0 ? (discountAmount / subtotal) : 0;
+
+const transactionPayload = {
+    total: subtotal,
+    discount: discountAmount,
+    final_total: finalTotal,
+    payment_methods: payments,
+    user_id: user.id!,
+    notes: notes,
+    is_delivery: isDelivery,
+    customer_id: selectedCustomerId,
+    // ✅ تعديل الأصناف لتشمل نصيبها من الخصم
+    items: activeCart.map(item => ({
+        ...item,
+        // نصيب القطعة الواحدة من الخصم = سعرها الأصلي × نسبة خصم الفاتورة
+        discount: item.price * discountRate 
+    }))
+};
 
         try {
             const response = await fetch(`${API_URL}/api/transactions`, {

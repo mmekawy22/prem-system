@@ -68,7 +68,7 @@ import CloseSales from "./components/CloseSales";
 
 
 
-const API_URL = "http://192.168.1.20:3001";
+const API_URL = "http://192.168.1.11:3001";
 
 // ************ Theme Hook ************
 const useTheme = () => {
@@ -204,7 +204,7 @@ function Sidebar({ isCollapsed }: { isCollapsed: boolean }) {
         />
 <NavItem
   to="/close-sales"
-  permission="manage_inventory"
+  permission="close_sales"
   icon={<FiScissors size={20} />}
   labelKey="sidebar.closeSales"
 />
@@ -306,6 +306,10 @@ function Layout() {
   useHotkeys("f11", (e) => {
     e.preventDefault();
     navigate("/pos");
+  }, { enableOnFormTags: true }, [navigate]);
+useHotkeys("ctrl+c", (e) => {
+    e.preventDefault();
+    navigate("/اتمام الشراء");
   }, { enableOnFormTags: true }, [navigate]);
   
   useHotkeys("f6>f7", () => navigate("/customers"), { enableOnFormTags: true }, [navigate]);
@@ -517,7 +521,7 @@ function App() {
 <Route
   path="/close-sales"
   element={
-    <ProtectedRoute permission="manage_inventory">
+    <ProtectedRoute permission="close_sales">
       <CloseSales />
     </ProtectedRoute>
   }

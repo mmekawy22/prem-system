@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 
-const API_URL = 'http://192.168.1.20:3001/api';
+const API_URL = 'http://192.168.1.11:3001/api';
 
 // This is the full User type including the permissions string from the server
 interface User {
@@ -15,7 +15,7 @@ const allPermissions = [
   'view_dashboard', 'use_pos', 'manage_inventory', 'process_returns',
   'manage_customers', 'manage_suppliers', 'manage_purchases', 'view_all_transactions',
   'manage_expenses', 'manage_users', 'view_reports', 'search_receipts',
-  'close_shift', 'view_shift_history', 'manage_settings',"view_sold_products"
+  'close_shift', 'view_shift_history', 'manage_settings','close_sales',"view_sold_products"
 ];
 
 function Users() {

@@ -5,29 +5,30 @@ const bcrypt = require('bcrypt');
 const saltRounds = 10;
 const fs = require('fs/promises');
 const path = require('path');
-
+const multer = require('multer');
 let USER_UPLOADS_DIR;
 
-// نحاول نجيب Electron لو متاح
+// 1. نحاول نجيب Electron لو متاح
 let electronApp;
 try {
   const electron = require('electron');
-  // electron.app موجود فقط في الـ main process
   electronApp = electron.app || (electron.remote && electron.remote.app);
 } catch {
-  electronApp = null; // Electron مش متاح
+  electronApp = null; 
 }
 
-// نحدد المسار حسب البيئة
+// 2. نحدد المسار حسب البيئة (هنا بنعطي قيمة للمتغير أولاً)
 if (electronApp && electronApp.getPath) {
   USER_UPLOADS_DIR = path.join(electronApp.getPath('userData'), 'uploads');
 } else {
-  // لو مش Electron، نحفظ الملفات داخل فولدر المشروع
   USER_UPLOADS_DIR = path.join(__dirname, 'uploads');
 }
 
-// نتأكد إن الفولدر موجود
+// 3. نتأكد إن الفولدر موجود
 fs.mkdir(USER_UPLOADS_DIR, { recursive: true }).catch(() => {});
+
+// 4. الآن نستخدم المسار في multer بعد ما أصبح له قيمة
+const upload = multer({ dest: USER_UPLOADS_DIR });
 
 const app = express();
 const port = 3001;
@@ -877,7 +878,7 @@ app.get('/api/settings', async (req, res) => {
 
         // ✅ أضف رابط الصورة الكامل فقط عند الإرجاع
         if (setting.store_logo && !setting.store_logo.startsWith('http')) {
-            setting.store_logo = `http://192.168.1.20:3001${setting.store_logo}`;
+            setting.store_logo = `http://192.168.1.11:3001${setting.store_logo}`;
         }
 
         res.json(setting);
@@ -1515,7 +1516,67 @@ app.get('/api/shifts/history', async (req, res) => {
         connection.release();
     }
 });
+// ============================================================
+// ============================================================
+// --- الجزء الخاص بالذكاء الاصطناعي (نسخة الدعم الشامل) ---
+// ============================================================
 
+const GEMINI_API_KEY = "AIzaSyDN2A42HHigpa21psnzP1DjpSJzi4OK_IE";
+
+app.post('/api/ai/extract-invoice', upload.single('invoice'), async (req, res) => {
+    try {
+        if (!req.file) return res.status(400).json({ error: 'لم يتم رفع ملف.' });
+
+        const fileBuffer = await fs.readFile(req.file.path);
+        const base64Data = fileBuffer.toString("base64");
+
+        // جربنا v1 و v1beta، والحل الأضمن هو استخدام المسار ده مع الموديل المحدث
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_API_KEY}`;
+
+        const payload = {
+            contents: [{
+                parts: [
+                    { text: "أنت محاسب. استخرج المنتجات من الفاتورة كـ JSON Array يحتوي على name, cost_price, quantity. لا تكتب أي كلام إضافي، فقط الـ JSON." },
+                    { inline_data: { mime_type: "application/pdf", data: base64Data } }
+                ]
+            }],
+            safetySettings: [
+                { category: "HARM_CATEGORY_HARASSMENT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_HATE_SPEECH", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_SEXUALLY_EXPLICIT", threshold: "BLOCK_NONE" },
+                { category: "HARM_CATEGORY_DANGEROUS_CONTENT", threshold: "BLOCK_NONE" }
+            ]
+        };
+
+        const response = await fetch(apiUrl, {
+            method: 'POST',
+            body: JSON.stringify(payload),
+            headers: { 'Content-Type': 'application/json' }
+        });
+
+        const result = await response.json();
+
+        // مسح الملف المؤقت
+        await fs.unlink(req.file.path).catch(() => {});
+
+        // التحقق من وجود رد من الموديل
+        if (result.candidates && result.candidates[0].content.parts[0].text) {
+            const rawText = result.candidates[0].content.parts[0].text;
+            const cleanJson = rawText.replace(/```json|```/g, "").trim();
+            res.json(JSON.parse(cleanJson));
+        } else {
+            // لو الـ 404 لسه موجودة، هنطبع الرابط اللي انضرب بالظبط في الـ Terminal
+            console.error("رابط الطلب:", apiUrl);
+            console.error("رد جوجل بالكامل:", JSON.stringify(result, null, 2));
+            throw new Error(result.error?.message || "فشل استخراج البيانات من الرد.");
+        }
+
+    } catch (error) {
+        console.error("AI Error Detailed:", error);
+        if (req.file) await fs.unlink(req.file.path).catch(() => {});
+        res.status(500).json({ error: 'حدث خطأ: ' + error.message });
+    }
+});
 // Final Error Handlers
 app.use((req, res, next) => {
     res.status(404).json({ error: `Route not found: ${req.originalUrl}` });

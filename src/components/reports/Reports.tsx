@@ -1,251 +1,306 @@
 import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { ResponsiveContainer, LineChart, Line, BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend } from 'recharts';
-import { FiAlertTriangle, FiPrinter } from 'react-icons/fi';
+import { 
+    ResponsiveContainer, BarChart, Bar, XAxis, YAxis, 
+    CartesianGrid, Tooltip, Legend, Cell 
+} from 'recharts';
+import { 
+    FiAlertTriangle, FiPrinter, FiTrendingUp, FiPackage, 
+    FiShoppingCart, FiUsers, FiDollarSign, FiCalendar, FiArrowDown, FiArrowUp 
+} from 'react-icons/fi';
+import { fetchPurchases, getProductsAPI } from '../../services/api';
+import type { Purchase, Product } from '../../types';
 
-// --- Interfaces ---
-interface ReportSummary {
-    transaction_count: number;
-    total_revenue: number;
-    total_items_sold: number;
-    gross_profit: number;
-}
-interface SalesOverTime {
-    date: string;
-    daily_revenue: number;
-}
-interface ProductPerformance {
-    name: string;
-    total_quantity: number;
-}
-interface SalesByCategory {
-    category: string;
-    total_revenue: number;
-}
-interface ReportData {
-    summary: ReportSummary;
-    salesOverTime: SalesOverTime[];
-    topProducts: ProductPerformance[];
-    worstProducts: ProductPerformance[];
-    salesByCategory: SalesByCategory[];
-}
-interface SmartLowStockItem {
-    id: number;
-    name: string;
-    stock: number;
-    min_stock: number;
-    shortage: number;
-    supplier_name: string | null;
-    sales_velocity_30d: number;
-    days_of_stock_left: string | number;
-    recommended_reorder_qty: number;
-}
-
-const API_URL = 'http://192.168.1.20:3001/api';
-
-// --- Main Component ---
-function Reports() {
+const Reports: React.FC = () => {
     const { t } = useTranslation();
-    const [startDate, setStartDate] = useState(new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().split('T')[0]);
-    const [endDate, setEndDate] = useState(new Date().toISOString().split('T')[0]);
-    const [loading, setLoading] = useState(false);
     
-    const [activeTab, setActiveTab] = useState('summary');
-    
-    const [reportData, setReportData] = useState<ReportData | null>(null);
-    const [lowStockData, setLowStockData] = useState<SmartLowStockItem[] | null>(null);
-
-    const fetchFinancialReport = async () => {
-        setLoading(true);
-        setReportData(null);
-        try {
-            const response = await fetch(`${API_URL}/reports/summary?startDate=${startDate}&endDate=${endDate}`);
-            if (!response.ok) throw new Error('Failed to fetch summary report');
-            const data: ReportData = await response.json();
-            setReportData(data);
-        } catch (error) {
-            console.error("Failed to generate report:", error);
-            alert('Failed to generate summary report.');
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const fetchLowStockReport = async () => {
-        setLoading(true);
-        setLowStockData(null);
-        try {
-            const response = await fetch(`${API_URL}/reports/low-stock`);
-            if (!response.ok) throw new Error('Failed to fetch low stock report');
-            const data: SmartLowStockItem[] = await response.json();
-            setLowStockData(data);
-        } catch (error) {
-            console.error("Failed to generate low stock report:", error);
-            alert('Failed to generate low stock report.');
-        } finally {
-            setLoading(false);
-        }
-    };
+    // States
+    const [purchases, setPurchases] = useState<Purchase[]>([]);
+    const [products, setProducts] = useState<Product[]>([]);
+    const [isLoading, setIsLoading] = useState(true);
+    const [dateRange, setDateRange] = useState({ start: '', end: '' });
+    const [activeTab, setActiveTab] = useState<'overview' | 'inventory' | 'staff' | 'products'>('overview');
 
     useEffect(() => {
-        if (activeTab === 'summary') {
-            fetchFinancialReport();
-        } else if (activeTab === 'lowStock') {
-            fetchLowStockReport();
-        }
-    }, [startDate, endDate, activeTab]);
+        const loadData = async () => {
+            try {
+                setIsLoading(true);
+                const [purchasesData, productsData] = await Promise.all([
+                    fetchPurchases(),
+                    getProductsAPI()
+                ]);
+                setPurchases(Array.isArray(purchasesData) ? purchasesData : []);
+                setProducts(Array.isArray(productsData) ? productsData : []);
+            } catch (error) {
+                console.error("Error loading reports:", error);
+            } finally {
+                setIsLoading(false);
+            }
+        };
+        loadData();
+    }, []);
 
-    const setDateRange = (period: 'today' | 'week' | 'month') => {
-        const today = new Date();
-        let start = new Date();
-        if (period === 'today') { /* start is already today */ } 
-        else if (period === 'week') { start.setDate(today.getDate() - today.getDay()); }
-        else if (period === 'month') { start = new Date(today.getFullYear(), today.getMonth(), 1); }
-        setStartDate(start.toISOString().split('T')[0]);
-        setEndDate(today.toISOString().split('T')[0]);
-    };
+    // --- العمليات الحسابية (مع حماية كاملة من NaN) ---
+
+    // 1. فلترة البيانات حسب التاريخ
+    const filteredPurchases = purchases.filter(p => {
+        if (!dateRange.start || !dateRange.end) return true;
+        const pDate = new Date(p.created_at).toISOString().split('T')[0];
+        return pDate >= dateRange.start && pDate <= dateRange.end;
+    });
+
+    // 2. إجمالي المشتريات (المنصرف)
+    const totalSpent = filteredPurchases.reduce((acc, curr) => {
+        const val = Number(curr.total_amount);
+        return acc + (isNaN(val) ? 0 : val);
+    }, 0);
+    
+    // 3. تحليل المخزون والأرباح المتوقعة
+    const inventoryStats = products.reduce((acc, p) => {
+        const stock = Number(p.stock) || 0;
+        const cost = Number(p.cost_price) || 0;
+        const price = Number(p.price) || 0;
+        
+        acc.totalCost += (stock * cost);
+        acc.expectedProfit += (stock * (price - cost));
+        return acc;
+    }, { totalCost: 0, expectedProfit: 0 });
+
+    // 4. تحليل أداء الأصناف (الربحية)
+    const productPerformance = products.map(p => {
+        const cost = Number(p.cost_price) || 0;
+        const price = Number(p.price) || 0;
+        return {
+            name: p.name || 'غير معروف',
+            profitPerUnit: price - cost,
+            stock: Number(p.stock) || 0
+        };
+    });
+
+    const topProfitable = [...productPerformance].sort((a, b) => b.profitPerUnit - a.profitPerUnit);
+    const lowProfitable = [...productPerformance].sort((a, b) => a.profitPerUnit - b.profitPerUnit);
+
+    // 5. تحليل أداء الموظفين (بناءً على فواتير المشتريات المُدخلة)
+    const staffDataMap = filteredPurchases.reduce((acc: any, curr) => {
+        const user = curr.user_name || "موظف غير معروف";
+        const amount = Number(curr.total_amount) || 0;
+        if (!acc[user]) acc[user] = { name: user, total: 0, count: 0 };
+        acc[user].total += amount;
+        acc[user].count += 1;
+        return acc;
+    }, {});
+
+    const staffChartData = Object.values(staffDataMap);
+
+    if (isLoading) return (
+        <div className="flex h-screen items-center justify-center dark:bg-slate-900">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-500"></div>
+        </div>
+    );
 
     return (
-        <div className="p-6 bg-gray-50 dark:bg-slate-900 min-h-screen">
-            <div className="flex justify-between items-center mb-6 no-print">
-                <h2 className="text-3xl font-bold text-slate-800 dark:text-slate-200">{t('reports.title', 'Reports')}</h2>
-                <button
-                    onClick={() => window.print()}
-                    className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded-lg flex items-center gap-2 transition-colors"
-                >
-                    <FiPrinter />
-                    <span>{t('reports.printReport', 'Print Report')}</span>
-                </button>
+        <div className="p-6 bg-slate-50 dark:bg-slate-900 min-h-screen text-right font-sans" dir="rtl">
+            
+            {/* Header & Filter Area */}
+            <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-4 no-print">
+                <div>
+                    <h1 className="text-3xl font-black text-slate-800 dark:text-white">التقارير التحليلية</h1>
+                    <p className="text-slate-500 dark:text-slate-400">ملخص الأرباح، أداء الموظفين، ونواقص المخزن</p>
+                </div>
+                
+                <div className="flex flex-wrap gap-3 bg-white dark:bg-slate-800 p-3 rounded-2xl shadow-sm border dark:border-slate-700">
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold dark:text-slate-300">من:</span>
+                        <input type="date" className="border rounded-lg px-2 py-1 text-sm dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
+                               onChange={(e) => setDateRange({...dateRange, start: e.target.value})} />
+                    </div>
+                    <div className="flex items-center gap-2">
+                        <span className="text-xs font-bold dark:text-slate-300">إلى:</span>
+                        <input type="date" className="border rounded-lg px-2 py-1 text-sm dark:bg-slate-700 dark:text-white outline-none focus:ring-2 focus:ring-blue-500" 
+                               onChange={(e) => setDateRange({...dateRange, end: e.target.value})} />
+                    </div>
+                    <button onClick={() => window.print()} className="bg-blue-600 text-white px-5 py-2 rounded-xl text-sm font-bold flex items-center gap-2 hover:bg-blue-700 transition-all">
+                        <FiPrinter /> طباعة
+                    </button>
+                </div>
             </div>
 
-            <div className="flex border-b border-slate-200 dark:border-slate-700 mb-6 no-print">
-                <button onClick={() => setActiveTab('summary')} className={`py-2 px-4 ${activeTab === 'summary' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>{t('reports.salesAndProfit', 'Sales & Profit')}</button>
-                <button onClick={() => setActiveTab('lowStock')} className={`py-2 px-4 ${activeTab === 'lowStock' ? 'border-b-2 border-blue-500 text-blue-600 dark:text-blue-400 font-semibold' : 'text-slate-500 dark:text-slate-400'}`}>{t('reports.smartLowStock', 'Smart Low Stock')}</button>
+            {/* Summary Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+                <SummaryCard title="مشتريات الفترة" value={totalSpent} icon={<FiShoppingCart/>} color="blue" suffix="EGP" />
+                <SummaryCard title="أرباح المخزن المتوقعة" value={inventoryStats.expectedProfit} icon={<FiTrendingUp/>} color="emerald" suffix="EGP" />
+                <SummaryCard title="قيمة المخزون (تكلفة)" value={inventoryStats.totalCost} icon={<FiPackage/>} color="purple" suffix="EGP" />
+                <SummaryCard title="إجمالي العمليات" value={filteredPurchases.length} icon={<FiCalendar/>} color="amber" />
             </div>
 
-            <div className="printable-area">
-                {activeTab === 'summary' && (
-                    <div>
-                        <div className="bg-white dark:bg-slate-800 p-4 rounded-xl shadow-lg mb-8 no-print">
-                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                <div>
-                                    <label className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('reports.dateRange', 'Date Range')}</label>
-                                    <div className="flex items-center mt-1">
-                                        <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="p-2 border rounded-md dark:bg-slate-700 dark:border-slate-600" />
-                                        <span className="mx-2 text-slate-500">{t('reports.to', 'to')}</span>
-                                        <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="p-2 border rounded-md dark:bg-slate-700 dark:border-slate-600" />
-                                    </div>
-                                </div>
-                                <div>
-                                    <label className="text-sm font-medium text-slate-600 dark:text-slate-400">{t('reports.quickFilters', 'Quick Filters')}</label>
-                                    <div className="flex space-x-2 mt-1">
-                                        <button onClick={() => setDateRange('today')} className="px-3 py-2 text-sm bg-gray-100 dark:bg-slate-700 rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">{t('reports.today', 'Today')}</button>
-                                        <button onClick={() => setDateRange('week')} className="px-3 py-2 text-sm bg-gray-100 dark:bg-slate-700 rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">{t('reports.thisWeek', 'This Week')}</button>
-                                        <button onClick={() => setDateRange('month')} className="px-3 py-2 text-sm bg-gray-100 dark:bg-slate-700 rounded-md hover:bg-gray-200 dark:hover:bg-slate-600">{t('reports.thisMonth', 'This Month')}</button>
-                                    </div>
-                                </div>
+            {/* Tabs */}
+            <div className="flex gap-2 mb-8 bg-white dark:bg-slate-800 p-1.5 rounded-2xl shadow-sm w-fit no-print">
+                <TabBtn active={activeTab === 'overview'} onClick={() => setActiveTab('overview')} label="نظرة عامة" />
+                <TabBtn active={activeTab === 'products'} onClick={() => setActiveTab('products')} label="تحليل الأداء" />
+                <TabBtn active={activeTab === 'staff'} onClick={() => setActiveTab('staff')} label="أداء الموظفين" />
+                <TabBtn active={activeTab === 'inventory'} onClick={() => setActiveTab('inventory')} label="النواقص" />
+            </div>
+
+            {/* Tab Views */}
+            <div className="animate-in fade-in slide-in-from-bottom-4 duration-500">
+                {activeTab === 'overview' && (
+                    <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+                        <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border dark:border-slate-700">
+                            <h3 className="font-bold text-lg mb-6 dark:text-white">إحصائيات مشتريات الموظفين</h3>
+                            <div className="h-[350px]">
+                                <ResponsiveContainer width="100%" height="100%">
+                                    <BarChart data={staffChartData}>
+                                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                                        <XAxis dataKey="name" axisLine={false} tickLine={false} />
+                                        <YAxis axisLine={false} tickLine={false} />
+                                        <Tooltip cursor={{fill: '#f1f5f9'}} contentStyle={{borderRadius: '12px'}} />
+                                        <Bar dataKey="total" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                                    </BarChart>
+                                </ResponsiveContainer>
                             </div>
                         </div>
-
-                        {loading && <p className="text-center p-10 text-slate-500">{t('reports.loadingFinancial', 'Loading financial report...')}</p>}
-                        {!loading && reportData && (
-                            <div className="space-y-8">
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                                    <SummaryCard title={t('reports.totalRevenue', 'Total Revenue')} value={reportData.summary.total_revenue} format="currency" color="blue" />
-                                    <SummaryCard title={t('reports.grossProfit', 'Gross Profit')} value={reportData.summary.gross_profit} format="currency" color="green" />
-                                    <SummaryCard title={t('reports.numberOfSales', 'Number of Sales')} value={reportData.summary.transaction_count} format="number" color="purple" />
-                                    <SummaryCard title={t('reports.itemsSold', 'Items Sold')} value={reportData.summary.total_items_sold} format="number" color="yellow" />
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-5 gap-8">
-                                    <div className="lg:col-span-3 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                                        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">{t('reports.revenueOverTime', 'Revenue Over Time')}</h3>
-                                        <ResponsiveContainer width="100%" height={300}><LineChart data={reportData.salesOverTime}><CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} /><XAxis dataKey="date" tickFormatter={(str) => new Date(str).toLocaleDateString()} /><YAxis /><Tooltip formatter={(value: number) => `${value.toFixed(2)} EGP`} /><Legend /><Line type="monotone" dataKey="daily_revenue" name={t('reports.dailyRevenue', 'Daily Revenue')} stroke="#3b82f6" strokeWidth={2} /></LineChart></ResponsiveContainer>
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border dark:border-slate-700">
+                            <h3 className="font-bold text-lg mb-4 dark:text-white">آخر فواتير المشتريات</h3>
+                            <div className="space-y-4">
+                                {filteredPurchases.slice(0, 7).map(p => (
+                                    <div key={p.id} className="flex justify-between items-center p-3 hover:bg-slate-50 dark:hover:bg-slate-700/50 rounded-xl transition-all border-r-4 border-blue-500">
+                                        <div>
+                                            <p className="font-bold text-sm dark:text-white">#{p.id} - {p.supplier_name || 'مورد عام'}</p>
+                                            <p className="text-xs text-slate-400">{p.user_name}</p>
+                                        </div>
+                                        <span className="font-bold text-blue-600">{Number(p.total_amount).toFixed(2)}</span>
                                     </div>
-                                    <div className="lg:col-span-2 bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                                        <h3 className="text-xl font-semibold mb-4 text-slate-800 dark:text-slate-200">{t('reports.salesByCategory', 'Sales by Category')}</h3>
-                                        <ResponsiveContainer width="100%" height={300}>
-                                            <BarChart data={reportData.salesByCategory} layout="vertical" margin={{ top: 5, right: 30, left: 20, bottom: 5 }}>
-                                                <CartesianGrid strokeDasharray="3 3" strokeOpacity={0.2} />
-                                                <XAxis type="number" />
-                                                <YAxis type="category" dataKey="category" width={80} tick={{ fontSize: 12 }} />
-                                                <Tooltip formatter={(value: number) => `${value.toFixed(2)} EGP`} />
-                                                <Bar dataKey="total_revenue" name={t('reports.revenue', 'Revenue')} fill="#8884d8" />
-                                            </BarChart>
-                                        </ResponsiveContainer>
-                                    </div>
-                                </div>
-
-                                <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                                        <h3 className="text-xl font-semibold mb-4 text-green-600 dark:text-green-400">{t('reports.top5Selling', 'Top 5 Selling Products')}</h3>
-                                        <div className="space-y-4">{reportData.topProducts.map((p, i) => <div key={`top-${i}`} className="flex justify-between items-center"><span className="text-slate-600 dark:text-slate-300">{p.name}</span><span className="font-bold bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded-md text-sm">{p.total_quantity} {t('reports.units', 'units')}</span></div>)}</div>
-                                    </div>
-                                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                                        <h3 className="text-xl font-semibold mb-4 text-red-500 dark:text-red-400">{t('reports.worst5Selling', 'Worst 5 Selling Products')}</h3>
-                                        <div className="space-y-4">{reportData.worstProducts.map((p, i) => <div key={`worst-${i}`} className="flex justify-between items-center"><span className="text-slate-600 dark:text-slate-300">{p.name}</span><span className="font-bold bg-gray-100 dark:bg-slate-700 px-2 py-1 rounded-md text-sm">{p.total_quantity} {t('reports.units', 'units')}</span></div>)}</div>
-                                    </div>
-                                </div>
+                                ))}
                             </div>
-                        )}
+                        </div>
                     </div>
                 )}
-                
-                {activeTab === 'lowStock' && (
-                    <div className="bg-white dark:bg-slate-800 p-6 rounded-xl shadow-lg">
-                        <h3 className="text-2xl font-bold mb-4 text-slate-800 dark:text-slate-200">
-                            <FiAlertTriangle className="inline-block mr-2 text-yellow-500" />
-                            {t('reports.lowStockTitle', 'Smart Low Stock Report')}
-                        </h3>
-                        {loading && <p className="text-center p-10 text-slate-500">{t('reports.analyzingData', 'Analyzing inventory and sales data...')}</p>}
-                        {!loading && lowStockData && (
-                            <div className="overflow-x-auto">
-                                <table className="min-w-full text-sm">
-                                    <thead className="bg-gray-100 dark:bg-slate-700">
-                                        <tr>
-                                            <th className="py-3 px-4 text-left">{t('reports.product', 'Product')}</th>
-                                            <th className="py-3 px-4 text-center">{t('reports.stockCurrentMin', 'Stock (Current / Min)')}</th>
-                                            <th className="py-3 px-4 text-center">{t('reports.shortage', 'Shortage')}</th>
-                                            <th className="py-3 px-4 text-center">{t('reports.salesLast30d', 'Sales (Last 30d)')}</th>
-                                            <th className="py-3 px-4 text-center">{t('reports.estDaysLeft', 'Est. Days Left')}</th>
-                                            <th className="py-3 px-4 text-center text-blue-600 dark:text-blue-400">{t('reports.recommendedReorder', 'Recommended Reorder')}</th>
-                                            <th className="py-3 px-4 text-left">{t('reports.supplier', 'Supplier')}</th>
-                                        </tr>
-                                    </thead>
-                                    <tbody className="text-slate-700 dark:text-slate-400">
-                                        {lowStockData.map(item => (
-                                            <tr key={item.id} className="hover:bg-gray-50 dark:hover:bg-slate-700/50 border-b dark:border-slate-700">
-                                                <td className="py-3 px-4 font-semibold">{item.name}</td>
-                                                <td className="py-3 px-4 text-center font-mono"><span className="font-bold text-red-500">{item.stock}</span> / {item.min_stock}</td>
-                                                <td className="py-3 px-4 text-center font-mono font-bold text-orange-500">{item.shortage}</td>
-                                                <td className="py-3 px-4 text-center font-mono">{item.sales_velocity_30d}</td>
-                                                <td className="py-3 px-4 text-center font-mono">{item.days_of_stock_left}</td>
-                                                <td className="py-3 px-4 text-center font-mono font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/50">{item.recommended_reorder_qty}</td>
-                                                <td className="py-3 px-4">{item.supplier_name || 'N/A'}</td>
-                                            </tr>
-                                        ))}
-                                    </tbody>
-                                </table>
+
+                {activeTab === 'products' && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border dark:border-slate-700 shadow-sm">
+                            <h3 className="font-bold mb-6 flex items-center gap-2 text-emerald-600">
+                                <FiArrowUp /> الأصناف الأكثر ربحية (للقطعة)
+                            </h3>
+                            <div className="space-y-3">
+                                {topProfitable.slice(0, 10).map((p, i) => (
+                                    <div key={i} className="flex justify-between items-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-700/30">
+                                        <span className="text-sm font-bold dark:text-slate-200">{p.name}</span>
+                                        <span className="font-black text-emerald-500">+{p.profitPerUnit.toFixed(2)}</span>
+                                    </div>
+                                ))}
                             </div>
-                        )}
-                        {!loading && (!lowStockData || lowStockData.length === 0) && <p className="text-center p-10 text-slate-500">{t('reports.noLowStock', 'Great! No products are currently below their minimum stock level.')}</p>}
+                        </div>
+                        <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl border dark:border-slate-700 shadow-sm">
+                            <h3 className="font-bold mb-6 flex items-center gap-2 text-red-500">
+                                <FiArrowDown /> الأصناف الأقل ربحية (للقطعة)
+                            </h3>
+                            <div className="space-y-3">
+                                {lowProfitable.slice(0, 10).map((p, i) => (
+                                    <div key={i} className="flex justify-between items-center p-3 rounded-2xl bg-slate-50 dark:bg-slate-700/30">
+                                        <span className="text-sm font-bold dark:text-slate-200">{p.name}</span>
+                                        <span className="font-black text-red-400">{p.profitPerUnit.toFixed(2)}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'staff' && (
+                    <div className="bg-white dark:bg-slate-800 p-8 rounded-3xl shadow-sm border dark:border-slate-700">
+                        <h3 className="font-black text-xl mb-8 dark:text-white flex items-center gap-2">
+                            <FiUsers className="text-purple-500"/> تقرير إنتاجية الموظفين خلال الفترة
+                        </h3>
+                        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+                            {staffChartData.map((staff: any, i) => (
+                                <div key={i} className="p-6 rounded-2xl bg-gradient-to-br from-slate-50 to-white dark:from-slate-700 dark:to-slate-800 border dark:border-slate-600 shadow-sm">
+                                    <p className="text-slate-400 text-xs mb-1 font-bold">اسم الموظف</p>
+                                    <p className="text-lg font-black dark:text-white mb-4">{staff.name}</p>
+                                    <div className="pt-4 border-t dark:border-slate-600">
+                                        <p className="text-blue-600 text-xl font-black">{staff.total.toLocaleString()} <span className="text-xs">EGP</span></p>
+                                        <p className="text-slate-400 text-xs mt-1">بإجمالي {staff.count} عملية</p>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
+
+                {activeTab === 'inventory' && (
+                    <div className="bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border dark:border-slate-700 overflow-hidden">
+                        <h3 className="font-bold text-lg mb-6 text-red-500 flex items-center gap-2">
+                            <FiAlertTriangle /> قائمة النواقص المُلحة
+                        </h3>
+                        <div className="overflow-x-auto">
+                            <table className="w-full">
+                                <thead>
+                                    <tr className="text-slate-400 text-sm border-b dark:border-slate-700">
+                                        <th className="pb-4 text-right pr-4">الصنف</th>
+                                        <th className="pb-4 text-center">المخزون الحالي</th>
+                                        <th className="pb-4 text-center">الحد الأدنى</th>
+                                        <th className="pb-4 text-left pl-4">الحالة</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y dark:divide-slate-700">
+                                    {products.filter(p => (Number(p.stock) || 0) <= (Number(p.min_stock) || 5)).map(p => (
+                                        <tr key={p.id} className="hover:bg-slate-50 dark:hover:bg-slate-700/50 transition-all">
+                                            <td className="py-4 pr-4 dark:text-white font-medium">{p.name}</td>
+                                            <td className="py-4 text-center font-bold text-red-500">{p.stock}</td>
+                                            <td className="py-4 text-center dark:text-slate-400">{p.min_stock || 5}</td>
+                                            <td className="py-4 pl-4 text-left">
+                                                <span className="bg-red-100 text-red-600 text-[10px] px-3 py-1 rounded-full font-bold">يجب الشراء</span>
+                                            </td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
                     </div>
                 )}
             </div>
         </div>
     );
-}
-
-// --- Helper Components ---
-const SummaryCard = ({ title, value, format = 'currency', color = 'gray' }: { title: string, value: number, format: 'currency' | 'number', color: string }) => {
-    const { t } = useTranslation(); // Helper component also needs access to t
-    const colorClasses = {
-        blue: 'text-blue-600 dark:text-blue-400',
-        green: 'text-green-600 dark:text-green-400',
-        purple: 'text-purple-600 dark:text-purple-400',
-        yellow: 'text-yellow-600 dark:text-yellow-400',
-    }[color] || 'text-gray-600 dark:text-gray-400';
-    return <div className="bg-white dark:bg-slate-800 p-5 rounded-xl shadow-lg"><h3 className="text-slate-500 dark:text-slate-400 text-sm font-medium">{t(title, title)}</h3><p className={`text-3xl font-bold mt-1 ${colorClasses}`}>{format === 'currency' ? (value || 0).toFixed(2) + ' EGP' : (value || 0)}</p></div>;
 };
+
+// --- المكونات المساعدة ---
+
+const SummaryCard = ({ title, value, icon, color, suffix = "" }: any) => {
+    const colors: any = {
+        blue: "border-blue-500 bg-blue-50/20 text-blue-600",
+        emerald: "border-emerald-500 bg-emerald-50/20 text-emerald-600",
+        purple: "border-purple-500 bg-purple-50/20 text-purple-600",
+        amber: "border-amber-500 bg-amber-50/20 text-amber-600",
+    };
+
+    return (
+        <div className={`bg-white dark:bg-slate-800 p-6 rounded-3xl shadow-sm border-b-4 ${colors[color]} transition-all hover:translate-y--1`}>
+            <div className="flex justify-between items-center">
+                <div className="text-left">
+                    <p className="text-slate-500 dark:text-slate-400 text-xs font-bold mb-1">{title}</p>
+                    <h4 className="text-2xl font-black dark:text-white">
+                        {Number(value).toLocaleString()} <span className="text-xs font-normal">{suffix}</span>
+                    </h4>
+                </div>
+                <div className="p-3 rounded-2xl bg-white dark:bg-slate-700 shadow-sm text-2xl">
+                    {icon}
+                </div>
+            </div>
+        </div>
+    );
+};
+
+const TabBtn = ({ active, onClick, label }: any) => (
+    <button 
+        onClick={onClick}
+        className={`py-2 px-6 rounded-xl text-sm font-black transition-all ${
+            active 
+            ? 'bg-blue-600 text-white shadow-md' 
+            : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-200'
+        }`}
+    >
+        {label}
+    </button>
+);
 
 export default Reports;

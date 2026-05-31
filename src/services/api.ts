@@ -11,7 +11,7 @@ import { SoldProductsResponse } from "../types";
 import { PendingSale } from "../types";
 
 // عدل هنا للـ IP الصحيح لجهاز السيرفر
-const API_IP = "192.168.1.20"; // عدل هذا ليطابق جهاز السيرفر الفعلي
+const API_IP = "192.168.1.11"; // عدل هذا ليطابق جهاز السيرفر الفعلي
 const API_PORT = "3001";
 const API_BASE = `http://${API_IP}:${API_PORT}/api`;
 
@@ -35,7 +35,11 @@ export const fetchPurchases = async (): Promise<Purchase[]> => {
   const res = await api.get("/purchases");
   return res.data;
 };
-
+export const fetchStaffSalesAPI = async () => {
+  // هذا الرابط سيعود ببيانات الموظف وإجمالي مبيعاته
+  const res = await api.get("/reports/staff-performance");
+  return res.data;
+};
 // جلب تفاصيل فاتورة شراء واحدة
 export const getPurchaseDetailsAPI = async (
   id: number

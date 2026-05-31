@@ -39,7 +39,7 @@ function Returns() {
     setItemsToReturn({});
 
     try {
-      const response = await fetch(`http://192.168.1.20:3001/api/transactions/${searchId}`);
+      const response = await fetch(`http://192.168.1.11:3001/api/transactions/${searchId}`);
       
       if (!response.ok) {
         if (response.status === 404) {
@@ -97,14 +97,14 @@ const handleReturn = async () => {
 const returnPayload = {
   original_transaction_id: foundTransaction.id,
   user_id: user.id,
-items: returnedItems.map(item => ({
-  product_id: item.product_id,
-  quantity: itemsToReturn[item.id],  // ✅ صح هنا
-  price: item.price
-})),
-
+  items: returnedItems.map(item => ({
+    product_id: item.product_id,
+    quantity: itemsToReturn[item.id],
+    // ✅ إرسال السعر الصافي للسيرفر
+    price: item.price - (item.discount || 0) 
+  })),
   payment_methods: [
-    { method: "cash", amount: totalRefundAmount }  // بدل type
+    { method: "cash", amount: totalRefundAmount }
   ]
 };
 
@@ -116,7 +116,7 @@ items: returnedItems.map(item => ({
 console.log("Return Payload Sent:", JSON.stringify(returnPayload, null, 2));
 
   try {
-    const response = await fetch('http://192.168.1.20:3001/api/returns', {
+    const response = await fetch('http://192.168.1.11:3001/api/returns', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -146,7 +146,9 @@ const calculateRefundTotal = () => {
   if (!foundTransaction) return 0;
   return Object.entries(itemsToReturn).reduce((total, [itemId, quantity]) => {
     const item = foundTransaction.items.find(i => i.id === parseInt(itemId));
-    return total + (item ? item.price * quantity : 0);
+    // ✅ الحساب بالسعر الصافي (السعر - الخصم)
+    const netPrice = item ? (item.price - (item.discount || 0)) : 0;
+    return total + (netPrice * quantity);
   }, 0);
 };
   return (
@@ -190,6 +192,11 @@ const calculateRefundTotal = () => {
                     className="mr-3 h-5 w-5"
                   />
                   <span>{item.productName} (Sold: {item.quantity})</span>
+                  <span>
+  {item.productName} (تم بيع: {item.quantity}) 
+  - السعر: {item.price - item.discount} EGP 
+  {item.discount > 0 && <small className="text-gray-500"> (بعد خصم {item.discount})</small>}
+</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <label>Quantity:</label>

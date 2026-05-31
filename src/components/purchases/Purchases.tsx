@@ -21,9 +21,10 @@ import {
   getPurchaseDetailsAPI,
 } from "../../services/api";
 
-const API_BASE = "http://192.168.1.20:3001/api"; // تأكد من وضع IP صحيح للسيرفر
+const API_BASE = "http://192.168.1.11:3001/api"; // تأكد من وضع IP صحيح للسيرفر
 
 const Purchases: React.FC = () => {
+  const [isAiLoading, setIsAiLoading] = useState(false);
   const { t } = useTranslation();
   const { user } = useAuth();
 
@@ -111,7 +112,43 @@ const Purchases: React.FC = () => {
     };
     loadInitial();
   }, []);
+const handleAiUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  if (!e.target.files?.[0]) return;
+  
+  setIsAiLoading(true);
+  const formData = new FormData();
+  formData.append('invoice', e.target.files[0]);
 
+  try {
+    const response = await fetch(`${API_BASE}/ai/extract-invoice`, {
+      method: 'POST',
+      body: formData,
+    });
+    
+    if (!response.ok) throw new Error("Failed to extract");
+    
+    const data = await response.json(); // قائمة الأصناف من الـ AI
+    
+    // تحويل البيانات لشكل الـ Cart اللي عندك
+    const newItems = data.map((item: any) => ({
+      id: Math.random(), // معرف مؤقت للجدول
+      product_id: 0,     // 0 يعني صنف جديد مش موجود في الداتابيز
+      name: item.name,
+      cost_price: Number(item.cost_price) || 0,
+      quantity: Number(item.quantity) || 0,
+      selling_price: 0   // هسيبه صفر عشان تدخله يدوي بسرعة
+    }));
+
+    setPurchaseCart((prev) => [...prev, ...newItems]);
+    alert("تم استخراج البيانات بنجاح! راجع الأسعار وأدخل سعر البيع.");
+  } catch (error) {
+    console.error(error);
+    alert("حدث خطأ في قراءة الفاتورة، تأكد من جودة الملف.");
+  } finally {
+    setIsAiLoading(false);
+    e.target.value = ""; // تصغير الانبوت للرفع مرة تانية
+  }
+};
   // ======================================================
   // Helpers for cart (create mode)
   // ======================================================
@@ -382,6 +419,22 @@ const Purchases: React.FC = () => {
   // ======================================================
   // Render JSX
   // ======================================================
+  // دالة لطباعة باركودات الفاتورة المختارة حالياً
+const handlePrintCurrentInvoiceBarcodes = () => {
+  if (!invoiceItems || invoiceItems.length === 0) return;
+
+  // تحويل البيانات من نوع PurchaseItemDetail إلى التنسيق المطلوب للطباعة
+  const savedForPrint: PurchaseItemDetail[] = invoiceItems.map((p) => ({
+    id: p.id,
+    product_name: p.product_name,
+    barcode: p.barcode || "",
+    quantity: p.quantity,
+    cost_price: p.cost_price,
+    retail_price: p.retail_price,
+  }));
+
+  setItemsToPrint(savedForPrint);
+};
   return (
     <div className="p-6">
       <div className="flex justify-between items-center mb-6">
@@ -396,6 +449,7 @@ const Purchases: React.FC = () => {
                 ? "bg-white dark:bg-slate-800 text-blue-600"
                 : "text-slate-600 dark:text-slate-300"
             }`}
+            
           >
             {t("purchases.createNew", "Create New")}
           </button>
@@ -411,7 +465,32 @@ const Purchases: React.FC = () => {
           </button>
         </div>
       </div>
-
+<div className="flex items-center gap-4 mb-6 p-4 bg-purple-50 dark:bg-slate-800 rounded-lg border border-purple-200 dark:border-slate-700">
+  <div className="flex-1">
+    <h3 className="text-purple-800 dark:text-purple-300 font-bold mb-1">تسعير سريع بالذكاء الاصطناعي</h3>
+    <p className="text-xs text-slate-500">ارفع فاتورة المورد (PDF) وسنقوم بإدخال الأصناف بدلاً منك</p>
+  </div>
+  <label className={`relative cursor-pointer px-6 py-2 bg-purple-600 text-white rounded-full font-medium hover:bg-purple-700 transition-all ${isAiLoading ? 'opacity-50 cursor-not-allowed' : ''}`}>
+    {isAiLoading ? (
+      <span className="flex items-center gap-2">
+        <svg className="animate-spin h-4 w-4 text-white" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+        جاري المعالجة...
+      </span>
+    ) : (
+      'رفع الفاتورة PDF'
+    )}
+    <input 
+      type="file" 
+      accept="application/pdf" 
+      className="hidden" 
+      onChange={handleAiUpload} 
+      disabled={isAiLoading} 
+    />
+  </label>
+</div>
       {/* ---------------- CREATE MODE ---------------- */}
       {viewMode === "create" && (
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
@@ -613,12 +692,28 @@ const Purchases: React.FC = () => {
               {isDetailsError && <p className="text-red-500">Failed to load invoice details.</p>}
               {!isLoadingDetails && !isDetailsError && invoiceItems.length > 0 && (
                 <>
-                  <div className="flex justify-between items-center mb-4">
-                    <h3 className="text-xl font-bold dark:text-slate-200">Invoice #{selectedInvoiceId}</h3>
-                    <div>
-                      <button onClick={() => setSelectedInvoiceId(null)} className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded mr-2">Back</button>
-                    </div>
-                  </div>
+                 <div className="flex justify-between items-center mb-4">
+  <h3 className="text-xl font-bold dark:text-slate-200">Invoice #{selectedInvoiceId}</h3>
+  <div className="flex gap-2">
+    {/* الزر الجديد لطباعة الباركودات */}
+    <button 
+      onClick={handlePrintCurrentInvoiceBarcodes}
+      className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded flex items-center gap-2"
+    >
+      <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path d="M5 4a2 2 0 012-2h6a2 2 0 012 2v14l-5-2.5L5 18V4z" />
+      </svg>
+      {t("purchases.printBarcodes", "Print Barcodes")}
+    </button>
+    
+    <button 
+      onClick={() => setSelectedInvoiceId(null)} 
+      className="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded"
+    >
+      {t("general.back", "Back")}
+    </button>
+  </div>
+</div>
                   <div className="max-h-[50vh] overflow-y-auto">
                     <table className="min-w-full text-sm">
                       <thead className="bg-gray-100 dark:bg-slate-700 sticky top-0">
